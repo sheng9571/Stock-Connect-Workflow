@@ -1,0 +1,84 @@
+name: Generate and Deploy Stock Connect Page
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "4 4 * * *" # 16:10 Asia/Taipei
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  packages: read
+
+concurrency:
+  group: stock-connect-pages
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Taipei
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/stock-connect-generator:latest
+  PRIVATE_REPO: sheng9571/stock-connect
+
+jobs:
+  generate-page:
+    name: Generate index.html and deploy to GitHub Pages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout workflow repo
+        uses: actions/checkout@v4
+
+      - name: Checkout private stock-connect repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
+          path: stock-connect
+
+      - name: Prepare site directory
+        run: |
+          mkdir -p site
+          ls -la
+          ls -la stock-connect
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Pull runtime image
+        run: |
+          docker pull "${IMAGE_NAME}"
+
+      - name: Generate index.html
+        run: |
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
+            -v "${GITHUB_WORKSPACE}/site:/workspace/site" \
+            "${IMAGE_NAME}" \
+            sh -c "
+              cd /workspace/stock-connect &&
+              python3 -m stock_connect_monitor.main \
+                --cache-dir /workspace/cache \
+                --output /workspace/site/index.html
+            "
+
+      - name: Verify generated page
+        run: |
+          test -f site/index.html
+          ls -lh site/index.html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
