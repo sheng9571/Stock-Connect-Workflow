@@ -3,7 +3,7 @@ name: Generate and Deploy Stock Connect Page
 on:
   workflow_dispatch:
   schedule:
-    - cron: "4 4 * * *" # 16:10 Asia/Taipei
+    - cron: "4 16 * * *" # 00:04 Asia/Taipei
 
 permissions:
   contents: read
@@ -17,7 +17,7 @@ concurrency:
 
 env:
   TZ: Asia/Taipei
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/stock-connect-generator:latest
+  IMAGE_NAME: ghcr.io/sheng9571/stock-cn:latest
   PRIVATE_REPO: sheng9571/stock-connect
 
 jobs:
@@ -26,10 +26,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout workflow repo
-        uses: actions/checkout@v4
-
-      - name: Checkout private stock-connect repo
+      - name: Checkout Stock-Connect repo
         uses: actions/checkout@v4
         with:
           repository: ${{ env.PRIVATE_REPO }}
@@ -39,7 +36,6 @@ jobs:
       - name: Prepare site directory
         run: |
           mkdir -p site
-          ls -la
           ls -la stock-connect
 
       - name: Login to GitHub Container Registry

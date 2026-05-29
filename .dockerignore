@@ -1,9 +1,0 @@
-.git
-.github
-.cache
-output
-site
-test
-*.log
-*.tmp
-.DS_Store
