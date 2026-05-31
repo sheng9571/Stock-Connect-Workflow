@@ -1,18 +1,14 @@
-name: Generate and Deploy Stock Connect Page
+name: Parse A50 Constituents
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "4 16 * * *" # 00:04 Asia/Taipei
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
   packages: read
 
 concurrency:
-  group: stock-connect-pages
+  group: stock-connect-a50
   cancel-in-progress: false
 
 env:
@@ -21,8 +17,8 @@ env:
   PRIVATE_REPO: sheng9571/stock-connect
 
 jobs:
-  generate-page:
-    name: Generate index.html and deploy to GitHub Pages
+  parse-a50:
+    name: Download and parse FTSE China A50 constituents
     runs-on: ubuntu-latest
 
     steps:
@@ -33,9 +29,8 @@ jobs:
           token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
           path: stock-connect
 
-      - name: Prepare site directory
+      - name: Inspect source directory
         run: |
-          mkdir -p site
           ls -la stock-connect
 
       - name: Login to GitHub Container Registry
@@ -49,32 +44,16 @@ jobs:
         run: |
           docker pull "${IMAGE_NAME}"
 
-      - name: Generate index.html
+      - name: Parse A50 constituents
         run: |
           docker run --rm \
             -e TZ=Asia/Taipei \
             -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
-            -v "${GITHUB_WORKSPACE}/site:/workspace/site" \
             "${IMAGE_NAME}" \
             sh -c "
               cd /workspace/stock-connect &&
-              python3 -m stock_connect_monitor.main \
+              python3 -m stock_connect_monitor.a50_index \
                 --cache-dir /workspace/cache \
-                --output /workspace/site/index.html
+                --show-rows \
+                --strict-validation
             "
-
-      - name: Verify generated page
-        run: |
-          test -f site/index.html
-          ls -lh site/index.html
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
