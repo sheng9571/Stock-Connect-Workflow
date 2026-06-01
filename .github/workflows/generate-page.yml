@@ -1,18 +1,14 @@
-name: Generate and Deploy Stock Connect Page
+name: Verify TradingView ETF Names
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "4 16 * * *"
 
 permissions:
   contents: read
   packages: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: stock-connect-page
+  group: stock-connect-tradingview-etf-names
   cancel-in-progress: false
 
 env:
@@ -21,8 +17,8 @@ env:
   PRIVATE_REPO: sheng9571/stock-connect
 
 jobs:
-  generate-page:
-    name: Generate Stock Connect page
+  verify-tradingview-etf-names:
+    name: Verify TradingView ETF English full names
     runs-on: ubuntu-latest
 
     steps:
@@ -48,7 +44,7 @@ jobs:
         run: |
           docker pull "${IMAGE_NAME}"
 
-      - name: Generate page
+      - name: Run TradingView ETF name verification
         run: |
           mkdir -p site
           docker run --rm \
@@ -60,21 +56,20 @@ jobs:
               cd /workspace/stock-connect &&
               python3 -m stock_connect_monitor.main \
                 --cache-dir /workspace/cache \
-                --output /workspace/site/index.html
+                --output /workspace/site/index.html \
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --tradingview-etf-profile-limit-per-exchange 5 \
+                --tradingview-etf-profile-delay 0.5 \
+                --skip-sse-market-cap \
+                --skip-szse-market-cap \
+                --skip-etf-aum \
+                --skip-etf-holdings \
+                --skip-a50-index
             "
 
-      - name: Verify generated page
+      - name: Verify generated smoke-test page
         run: |
           test -f site/index.html
           ls -lh site/index.html
-
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
