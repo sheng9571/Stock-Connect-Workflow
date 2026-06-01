@@ -1,14 +1,18 @@
-name: Verify TradingView ETF Names
+name: Generate and Deploy Stock Connect Page
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "4 16 * * *"
 
 permissions:
   contents: read
   packages: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: stock-connect-tradingview-etf-names
+  group: stock-connect-page
   cancel-in-progress: false
 
 env:
@@ -17,8 +21,8 @@ env:
   PRIVATE_REPO: sheng9571/stock-connect
 
 jobs:
-  verify-tradingview-etf-names:
-    name: Verify TradingView ETF English full names
+  generate-page:
+    name: Generate Stock Connect page
     runs-on: ubuntu-latest
 
     steps:
@@ -44,7 +48,59 @@ jobs:
         run: |
           docker pull "${IMAGE_NAME}"
 
-      - name: Run TradingView ETF name verification
+      - name: Smoke test SSE with Playwright
+        run: |
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            "${IMAGE_NAME}" \
+            sh -c "python3 - <<'PY'
+          from playwright.sync_api import sync_playwright
+
+          ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0'
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
+              context = browser.new_context(
+                  user_agent=ua,
+                  locale='zh-TW',
+                  extra_http_headers={
+                      'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                      'DNT': '1',
+                      'Sec-GPC': '1',
+                  },
+              )
+              page = context.new_page()
+              try:
+                  response = page.goto('https://english.sse.com.cn/', wait_until='domcontentloaded', timeout=30000)
+                  print('[sse-playwright] english status=' + str(response.status if response else None))
+                  print('[sse-playwright] english final_url=' + page.url)
+                  print('[sse-playwright] english title=' + page.title())
+                  print('[sse-playwright] english html_preview=' + page.content()[:300].replace('\n', ' '))
+              except Exception as exc:
+                  print('[sse-playwright] english error=' + type(exc).__name__ + ': ' + str(exc))
+
+              api_url = 'https://query.sse.com.cn/commonQuery.do?jsonCallBack=jsonpCallback93575&isPagination=false&sqlId=COMMON_SSE_CP_GPJCTPZ_GPLB_GPGK_GSGK_C&COMPANY_CODE=600000&_=1780364110552'
+              try:
+                  api_response = context.request.get(
+                      api_url,
+                      headers={
+                          'Referer': 'https://english.sse.com.cn/',
+                          'Accept': '*/*',
+                          'Sec-Fetch-Dest': 'script',
+                          'Sec-Fetch-Mode': 'no-cors',
+                          'Sec-Fetch-Site': 'same-site',
+                      },
+                      timeout=30000,
+                  )
+                  text = api_response.text()
+                  print('[sse-playwright] api status=' + str(api_response.status))
+                  print('[sse-playwright] api bytes=' + str(len(text)))
+                  print('[sse-playwright] api_preview=' + text[:300].replace('\n', ' '))
+              except Exception as exc:
+                  print('[sse-playwright] api error=' + type(exc).__name__ + ': ' + str(exc))
+              browser.close()
+          PY"
+
+      - name: Generate page
         run: |
           mkdir -p site
           docker run --rm \
@@ -57,19 +113,29 @@ jobs:
               python3 -m stock_connect_monitor.main \
                 --cache-dir /workspace/cache \
                 --output /workspace/site/index.html \
-                --skip-sse-stock-profile \
-                --skip-szse-stock-profile \
-                --skip-szse-etf-profile \
+                --sse-stock-profile-limit 5 \
+                --szse-stock-profile-limit 5 \
+                --szse-etf-profile-limit 5 \
                 --tradingview-etf-profile-limit-per-exchange 5 \
-                --tradingview-etf-profile-delay 0.5 \
-                --skip-sse-market-cap \
-                --skip-szse-market-cap \
-                --skip-etf-aum \
-                --skip-etf-holdings \
-                --skip-a50-index
+                --sse-market-cap-limit 5 \
+                --szse-market-cap-limit 5 \
+                --etf-aum-limit 5 \
+                --etf-holdings-limit 5 \
+                --szse-index-limit 5
             "
 
-      - name: Verify generated smoke-test page
+      - name: Verify generated page
         run: |
           test -f site/index.html
           ls -lh site/index.html
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
