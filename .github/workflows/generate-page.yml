@@ -2,6 +2,15 @@ name: Generate and Deploy Stock Connect Page
 
 on:
   workflow_dispatch:
+    inputs:
+      task:
+        description: "Task to run"
+        required: true
+        default: "generate-page"
+        type: choice
+        options:
+          - generate-page
+          - low-frequency-cn-db-szse-stock-profiles
   schedule:
     - cron: "4 16 * * *"
 
@@ -19,11 +28,13 @@ env:
   TZ: Asia/Taipei
   IMAGE_NAME: ghcr.io/sheng9571/stock-cn:latest
   PRIVATE_REPO: sheng9571/stock-connect
+  STOCK_DB_REPO: sheng9571/Stock-DB
 
 jobs:
   generate-page:
     name: Generate Stock Connect page
     runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.task == 'generate-page'
 
     steps:
       - name: Checkout Stock-Connect repo
@@ -139,3 +150,133 @@ jobs:
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+
+  low-frequency-cn-db-szse-stock-profiles:
+    name: Update CN low-frequency SZSE stock profiles
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'low-frequency-cn-db-szse-stock-profiles'
+
+    steps:
+      - name: Checkout Stock-Connect repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
+          path: stock-connect
+
+      - name: Checkout Stock-DB repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.STOCK_DB_REPO }}
+          token: ${{ secrets.STOCK_DB_PAT }}
+          path: stock-db
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: sheng9571
+          password: ${{ secrets.STOCK_CN_GHCR_TOKEN }}
+
+      - name: Pull runtime image
+        run: |
+          docker pull "${IMAGE_NAME}"
+
+      - name: Resolve Stock-DB schema path
+        run: |
+          if [ -f "${GITHUB_WORKSPACE}/stock-db/schema/country/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/country/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/country/init.sql"
+          elif [ -f "${GITHUB_WORKSPACE}/stock-db/schema/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/init.sql"
+          else
+            echo "[stock-db] schema init sql not found"
+            exit 1
+          fi
+
+      - name: Update SZSE stock profiles in Stock-DB
+        run: |
+          mkdir -p cache
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
+            -v "${GITHUB_WORKSPACE}/stock-db:/workspace/stock-db" \
+            -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \
+            "${IMAGE_NAME}" \
+            sh -c "
+              cd /workspace/stock-connect &&
+              python3 -m stock_connect_monitor.main \
+                --cache-dir /workspace/cache \
+                --output /workspace/site/index.html \
+                --skip-sse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --skip-sse-market-cap \
+                --skip-szse-market-cap \
+                --skip-etf-aum \
+                --skip-etf-holdings \
+                --skip-szse-index \
+                --skip-a50-index \
+                --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite \
+                --stock-db-init-sql ${STOCK_DB_INIT_SQL} \
+                --stock-db-write-stock-profiles \
+                --stock-db-write-exchange SZSE \
+                --stock-db-require-complete-stock-profiles \
+                --skip-render
+            "
+
+      - name: Verify CN SQLite DB
+        working-directory: stock-db
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db = "databases/countries/CN/current.sqlite"
+          con = sqlite3.connect(db)
+          count = con.execute(
+              "select count(*) from instruments where country_code='CN' and exchange_code='SZSE' and instrument_type='stock'"
+          ).fetchone()[0]
+          profiles = con.execute(
+              "select count(*) from instrument_profiles where instrument_id like 'CN:SZSE:%:stock'"
+          ).fetchone()[0]
+          print(f"[stock-db] verify db={db} szse_stock_instruments={count} szse_stock_profiles={profiles}")
+          if count < 1000 or profiles < 1000:
+              raise SystemExit("Expected at least 1000 SZSE stock profiles in DB")
+          con.close()
+          PY
+
+      - name: Create Stock-DB update PR
+        working-directory: stock-db
+        env:
+          GH_TOKEN: ${{ secrets.STOCK_DB_PAT }}
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "[stock-db] no changes to commit"
+            exit 0
+          fi
+
+          git config user.name "stock-db-bot"
+          git config user.email "stock-db-bot@users.noreply.github.com"
+
+          BRANCH="bot/update-cn-low-frequency-$(date -u +'%Y%m%d-%H%M%S')"
+          git switch -c "$BRANCH"
+          git add databases/countries/CN/current.sqlite
+          git commit -m "Update CN SZSE stock profiles"
+          git push origin "$BRANCH"
+
+          BASE_BRANCH="$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+          if [ -z "$BASE_BRANCH" ] || [ "$BASE_BRANCH" = "(unknown)" ]; then
+            BASE_BRANCH="$(gh repo view "${STOCK_DB_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          fi
+          if [ -z "$BASE_BRANCH" ]; then
+            echo "[stock-db] failed to resolve default branch"
+            exit 1
+          fi
+          echo "[stock-db] create PR base=${BASE_BRANCH} head=${BRANCH}"
+
+          gh pr create \
+            --repo "${STOCK_DB_REPO}" \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "Update CN SZSE stock profiles" \
+            --body "Automated low-frequency CN SZSE stock profile update. This run writes all parsed SZSE stock profiles."
