@@ -14,6 +14,7 @@ on:
           - low-frequency-cn-db-sse-etf-profiles
           - low-frequency-cn-db-szse-stock-profiles
           - low-frequency-cn-db-szse-etf-profiles
+          - low-frequency-cn-db-etf-english-full-names
   schedule:
     - cron: "4 16 * * *"
 
@@ -682,3 +683,131 @@ jobs:
             --head "$BRANCH" \
             --title "Update CN SSE ETF profiles" \
             --body "Automated low-frequency CN SSE ETF profile update. This run writes all parsed SSE ETF profiles and available AUM/NAV metrics."
+
+  low-frequency-cn-db-etf-english-full-names:
+    name: Update CN low-frequency ETF English full names
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'low-frequency-cn-db-etf-english-full-names'
+
+    steps:
+      - name: Checkout Stock-Connect repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
+          path: stock-connect
+
+      - name: Checkout Stock-DB repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.STOCK_DB_REPO }}
+          token: ${{ secrets.STOCK_DB_PAT }}
+          path: stock-db
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: sheng9571
+          password: ${{ secrets.STOCK_CN_GHCR_TOKEN }}
+
+      - name: Pull runtime image
+        run: |
+          docker pull "${IMAGE_NAME}"
+
+      - name: Resolve Stock-DB schema path
+        run: |
+          if [ -f "${GITHUB_WORKSPACE}/stock-db/schema/country/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/country/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/country/init.sql"
+          elif [ -f "${GITHUB_WORKSPACE}/stock-db/schema/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/init.sql"
+          else
+            echo "[stock-db] schema init sql not found"
+            exit 1
+          fi
+
+      - name: Update ETF English full names in Stock-DB
+        run: |
+          mkdir -p cache
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
+            -v "${GITHUB_WORKSPACE}/stock-db:/workspace/stock-db" \
+            -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \
+            "${IMAGE_NAME}" \
+            sh -c "
+              cd /workspace/stock-connect &&
+              python3 -m stock_connect_monitor.main \
+                --cache-dir /workspace/cache \
+                --output /workspace/site/index.html \
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-sse-market-cap \
+                --skip-szse-market-cap \
+                --skip-etf-aum \
+                --skip-etf-holdings \
+                --skip-szse-index \
+                --skip-a50-index \
+                --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite \
+                --stock-db-init-sql ${STOCK_DB_INIT_SQL} \
+                --stock-db-write-etf-english-full-names \
+                --skip-render
+            "
+
+      - name: Verify CN SQLite DB ETF English full names
+        working-directory: stock-db
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db = "databases/countries/CN/current.sqlite"
+          con = sqlite3.connect(db)
+          sse = con.execute(
+              "select count(*) from instrument_profiles where instrument_id like 'CN:SSE:%:etf' and coalesce(full_name_en, '') <> ''"
+          ).fetchone()[0]
+          szse = con.execute(
+              "select count(*) from instrument_profiles where instrument_id like 'CN:SZSE:%:etf' and coalesce(full_name_en, '') <> ''"
+          ).fetchone()[0]
+          print(f"[stock-db] verify db={db} sse_etf_full_en={sse} szse_etf_full_en={szse}")
+          if sse < 20 or szse < 20:
+              raise SystemExit("Expected at least 20 SSE and 20 SZSE ETF English full names in DB")
+          con.close()
+          PY
+
+      - name: Create Stock-DB ETF English full-name update PR
+        working-directory: stock-db
+        env:
+          GH_TOKEN: ${{ secrets.STOCK_DB_PAT }}
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "[stock-db] no changes to commit"
+            exit 0
+          fi
+
+          git config user.name "stock-db-bot"
+          git config user.email "stock-db-bot@users.noreply.github.com"
+
+          BRANCH="bot/update-cn-etf-english-full-names-$(date -u +'%Y%m%d-%H%M%S')"
+          git switch -c "$BRANCH"
+          git add databases/countries/CN/current.sqlite
+          git commit -m "Update CN ETF English full names"
+          git push origin "$BRANCH"
+
+          BASE_BRANCH="$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+          if [ -z "$BASE_BRANCH" ] || [ "$BASE_BRANCH" = "(unknown)" ]; then
+            BASE_BRANCH="$(gh repo view "${STOCK_DB_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          fi
+          if [ -z "$BASE_BRANCH" ]; then
+            echo "[stock-db] failed to resolve default branch"
+            exit 1
+          fi
+          echo "[stock-db] create PR base=${BASE_BRANCH} head=${BRANCH}"
+
+          gh pr create \
+            --repo "${STOCK_DB_REPO}" \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "Update CN ETF English full names" \
+            --body "Automated low-frequency CN ETF English full-name update from TradingView. This run updates SSE and SZSE ETF full_name_en only."
