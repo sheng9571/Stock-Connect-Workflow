@@ -85,6 +85,7 @@ jobs:
                 --stock-db-write-stock-profiles \
                 --stock-db-write-etf-profiles \
                 --stock-db-write-etf-english-full-names \
+                --stock-db-write-szse-index-prices \
                 --stock-db-missing-threshold 3 \
                 --skip-etf-holdings \
                 --skip-szse-index \
@@ -102,8 +103,11 @@ jobs:
           metrics = con.execute(
               "select count(*) from instrument_metrics_latest where coalesce(close_price, '') <> '' or coalesce(market_cap_cny, '') <> '' or coalesce(aum_cny, '') <> ''"
           ).fetchone()[0]
+          szse_index_prices = con.execute(
+              "select count(*) from instrument_metrics_latest where instrument_id like 'CN:SZSE:%:index' and quote_source='szse-index-time-data'"
+          ).fetchone()[0]
           instruments = con.execute("select count(*) from instruments where country_code='CN'").fetchone()[0]
-          print(f"[stock-db] verify instruments={instruments} metric_rows={metrics}")
+          print(f"[stock-db] verify instruments={instruments} metric_rows={metrics} szse_index_prices={szse_index_prices}")
           if instruments < 1000:
               raise SystemExit("Expected at least 1000 CN instruments after daily market update")
           con.close()

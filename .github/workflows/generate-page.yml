@@ -63,7 +63,8 @@ jobs:
                 --szse-market-cap-limit 5 \
                 --etf-aum-limit 5 \
                 --etf-holdings-limit 5 \
-                --szse-index-limit 5
+                --szse-index-limit 5 \
+                --skip-szse-index-price
             "
 
       - name: Verify generated page

@@ -87,6 +87,7 @@ jobs:
                 --skip-sse-market-cap \
                 --skip-szse-market-cap \
                 --skip-etf-aum \
+                --skip-szse-index-price \
                 --stock-db-write-etf-holdings \
                 --stock-db-write-szse-indexes \
                 --stock-db-write-a50-index \
