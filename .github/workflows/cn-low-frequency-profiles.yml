@@ -1,0 +1,255 @@
+name: CN Low-Frequency Profiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Low-frequency profile target"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - sse-stock-profiles
+          - szse-stock-profiles
+          - sse-etf-profiles
+          - szse-etf-profiles
+          - etf-english-full-names
+      mode:
+        description: "Fetch mode"
+        required: true
+        default: "missing-only"
+        type: choice
+        options:
+          - missing-only
+          - overwrite
+  schedule:
+    # 02:00 Asia/Taipei every Saturday. A guard step below keeps only the first Saturday of each month.
+    - cron: "0 18 * * 5"
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: stock-db-cn-low-frequency-profiles
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Taipei
+  IMAGE_NAME: ghcr.io/sheng9571/stock-cn:latest
+  PRIVATE_REPO: sheng9571/stock-connect
+  STOCK_DB_REPO: sheng9571/Stock-DB
+  LOW_FREQUENCY_TARGET: ${{ github.event.inputs.target || 'all' }}
+  LOW_FREQUENCY_MODE: ${{ github.event.inputs.mode || 'missing-only' }}
+
+jobs:
+  cn-low-frequency-profiles:
+    name: Update CN low-frequency profiles
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check first Saturday schedule guard
+        id: schedule_guard
+        run: |
+          SHOULD_RUN=true
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DAY_OF_MONTH="$(TZ=Asia/Taipei date +%d)"
+            if [ "${DAY_OF_MONTH#0}" -gt 7 ]; then
+              SHOULD_RUN=false
+            fi
+          fi
+          echo "should_run=${SHOULD_RUN}" >> "$GITHUB_OUTPUT"
+          echo "[workflow] should_run=${SHOULD_RUN}"
+
+      - name: Checkout Stock-Connect repo
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
+          path: stock-connect
+
+      - name: Checkout Stock-DB repo
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.STOCK_DB_REPO }}
+          token: ${{ secrets.STOCK_DB_PAT }}
+          path: stock-db
+
+      - name: Login to GitHub Container Registry
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: sheng9571
+          password: ${{ secrets.STOCK_CN_GHCR_TOKEN }}
+
+      - name: Pull runtime image
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        run: docker pull "${IMAGE_NAME}"
+
+      - name: Resolve Stock-DB schema path
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        run: |
+          if [ -f "${GITHUB_WORKSPACE}/stock-db/schema/country/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/country/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/country/init.sql"
+          elif [ -f "${GITHUB_WORKSPACE}/stock-db/schema/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/init.sql"
+          else
+            echo "[stock-db] schema init sql not found"
+            exit 1
+          fi
+
+      - name: Update Stock-DB low-frequency profiles
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        run: |
+          mkdir -p cache site
+
+          COMMON_ARGS="\
+            --cache-dir /workspace/cache \
+            --output /workspace/site/index.html \
+            --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite \
+            --stock-db-init-sql ${STOCK_DB_INIT_SQL} \
+            --low-frequency-mode ${LOW_FREQUENCY_MODE} \
+            --skip-sse-market-cap \
+            --skip-szse-market-cap \
+            --skip-etf-holdings \
+            --skip-szse-index \
+            --skip-a50-index \
+            --skip-render"
+
+          case "${LOW_FREQUENCY_TARGET}" in
+            all)
+              TARGET_ARGS="\
+                --stock-db-write-stock-profiles \
+                --stock-db-write-etf-profiles \
+                --stock-db-write-etf-english-full-names"
+              ;;
+            sse-stock-profiles)
+              TARGET_ARGS="\
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --skip-etf-aum \
+                --stock-db-write-stock-profiles \
+                --stock-db-write-exchange SSE \
+                --stock-db-require-complete-stock-profiles"
+              ;;
+            szse-stock-profiles)
+              TARGET_ARGS="\
+                --skip-sse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --skip-etf-aum \
+                --stock-db-write-stock-profiles \
+                --stock-db-write-exchange SZSE \
+                --stock-db-require-complete-stock-profiles"
+              ;;
+            sse-etf-profiles)
+              TARGET_ARGS="\
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --etf-aum-exchange SSE \
+                --stock-db-write-etf-profiles \
+                --stock-db-write-exchange SSE"
+              ;;
+            szse-etf-profiles)
+              TARGET_ARGS="\
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-tradingview-etf-profile \
+                --etf-aum-exchange SZSE \
+                --stock-db-write-etf-profiles \
+                --stock-db-write-exchange SZSE \
+                --stock-db-require-complete-etf-profiles"
+              ;;
+            etf-english-full-names)
+              TARGET_ARGS="\
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-etf-aum \
+                --stock-db-write-etf-english-full-names"
+              ;;
+            *)
+              echo "[stock-db] unknown target: ${LOW_FREQUENCY_TARGET}"
+              exit 1
+              ;;
+          esac
+
+          echo "[stock-db] low-frequency target=${LOW_FREQUENCY_TARGET} mode=${LOW_FREQUENCY_MODE}"
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
+            -v "${GITHUB_WORKSPACE}/stock-db:/workspace/stock-db" \
+            -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \
+            -v "${GITHUB_WORKSPACE}/site:/workspace/site" \
+            "${IMAGE_NAME}" \
+            sh -c "
+              cd /workspace/stock-connect &&
+              python3 -m stock_connect_monitor.main ${COMMON_ARGS} ${TARGET_ARGS}
+            "
+
+      - name: Verify CN SQLite DB profile data
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        working-directory: stock-db
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db = "databases/countries/CN/current.sqlite"
+          con = sqlite3.connect(db)
+          checks = {
+              "sse_stock_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SSE:%:stock'",
+              "szse_stock_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SZSE:%:stock'",
+              "sse_etf_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SSE:%:etf'",
+              "szse_etf_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SZSE:%:etf'",
+              "etf_full_en": "select count(*) from instrument_profiles where instrument_id like 'CN:%:%:etf' and coalesce(full_name_en, '') <> ''",
+          }
+          for name, sql in checks.items():
+              value = con.execute(sql).fetchone()[0]
+              print(f"[stock-db] verify {name}={value}")
+          con.close()
+          PY
+
+      - name: Create Stock-DB low-frequency update PR
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        working-directory: stock-db
+        env:
+          GH_TOKEN: ${{ secrets.STOCK_DB_PAT }}
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "[stock-db] no changes to commit"
+            exit 0
+          fi
+
+          git config user.name "stock-db-bot"
+          git config user.email "stock-db-bot@users.noreply.github.com"
+
+          BRANCH="bot/update-cn-low-frequency-${LOW_FREQUENCY_TARGET}-$(date -u +'%Y%m%d-%H%M%S')"
+          git switch -c "$BRANCH"
+          git add databases/countries/CN/current.sqlite
+          git commit -m "Update CN low-frequency profiles"
+          git push origin "$BRANCH"
+
+          BASE_BRANCH="$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+          if [ -z "$BASE_BRANCH" ] || [ "$BASE_BRANCH" = "(unknown)" ]; then
+            BASE_BRANCH="$(gh repo view "${STOCK_DB_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          fi
+          if [ -z "$BASE_BRANCH" ]; then
+            echo "[stock-db] failed to resolve default branch"
+            exit 1
+          fi
+          echo "[stock-db] create PR base=${BASE_BRANCH} head=${BRANCH}"
+
+          gh pr create \
+            --repo "${STOCK_DB_REPO}" \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "Update CN low-frequency profiles" \
+            --body "Automated CN low-frequency profile update. target=${LOW_FREQUENCY_TARGET}, mode=${LOW_FREQUENCY_MODE}."

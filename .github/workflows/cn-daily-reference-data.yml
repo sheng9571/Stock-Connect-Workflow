@@ -1,0 +1,139 @@
+name: CN Daily Reference Data
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 21:00 Asia/Taipei, Monday-Friday. Constituents/weights are often published later than quotes.
+    - cron: "0 13 * * 1-5"
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: stock-db-cn-daily-reference-data
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Taipei
+  IMAGE_NAME: ghcr.io/sheng9571/stock-cn:latest
+  PRIVATE_REPO: sheng9571/stock-connect
+  STOCK_DB_REPO: sheng9571/Stock-DB
+
+jobs:
+  cn-daily-reference-data:
+    name: Parse CN daily reference data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Stock-Connect repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
+          path: stock-connect
+
+      - name: Checkout Stock-DB repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.STOCK_DB_REPO }}
+          token: ${{ secrets.STOCK_DB_PAT }}
+          path: stock-db
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: sheng9571
+          password: ${{ secrets.STOCK_CN_GHCR_TOKEN }}
+
+      - name: Pull runtime image
+        run: docker pull "${IMAGE_NAME}"
+
+      - name: Resolve Stock-DB schema path
+        run: |
+          if [ -f "${GITHUB_WORKSPACE}/stock-db/schema/country/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/country/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/country/init.sql"
+          elif [ -f "${GITHUB_WORKSPACE}/stock-db/schema/init.sql" ]; then
+            echo "STOCK_DB_INIT_SQL=/workspace/stock-db/schema/init.sql" >> "$GITHUB_ENV"
+            echo "[stock-db] schema init path=schema/init.sql"
+          else
+            echo "[stock-db] schema init sql not found"
+            exit 1
+          fi
+
+      - name: Parse daily reference data
+        run: |
+          mkdir -p cache site
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
+            -v "${GITHUB_WORKSPACE}/stock-db:/workspace/stock-db" \
+            -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \
+            -v "${GITHUB_WORKSPACE}/site:/workspace/site" \
+            "${IMAGE_NAME}" \
+            sh -c "
+              cd /workspace/stock-connect &&
+              python3 -m stock_connect_monitor.main \
+                --cache-dir /workspace/cache \
+                --output /workspace/site/index.html \
+                --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite \
+                --stock-db-init-sql ${STOCK_DB_INIT_SQL} \
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --skip-sse-market-cap \
+                --skip-szse-market-cap \
+                --skip-etf-aum \
+                --stock-db-write-etf-holdings \
+                --stock-db-write-szse-indexes \
+                --stock-db-write-a50-index \
+                --skip-render
+            "
+
+      - name: Verify CN SQLite DB daily reference data
+        working-directory: stock-db
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db = "databases/countries/CN/current.sqlite"
+          con = sqlite3.connect(db)
+          indexes = con.execute("select count(*) from indexes").fetchone()[0]
+          index_constituents = con.execute("select count(*) from index_constituents_latest").fetchone()[0]
+          etf_holdings = con.execute("select count(*) from etf_holdings_latest").fetchone()[0]
+          print(f"[stock-db] verify indexes={indexes} index_constituents={index_constituents} etf_holdings={etf_holdings}")
+          con.close()
+          PY
+
+      - name: Create Stock-DB daily reference update PR
+        working-directory: stock-db
+        env:
+          GH_TOKEN: ${{ secrets.STOCK_DB_PAT }}
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "[stock-db] no changes to commit"
+            exit 0
+          fi
+
+          git config user.name "stock-db-bot"
+          git config user.email "stock-db-bot@users.noreply.github.com"
+
+          BRANCH="bot/update-cn-daily-reference-$(date -u +'%Y%m%d-%H%M%S')"
+          git switch -c "$BRANCH"
+          git add databases/countries/CN/current.sqlite
+          git commit -m "Update CN daily reference data"
+          git push origin "$BRANCH"
+
+          BASE_BRANCH="$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+          if [ -z "$BASE_BRANCH" ] || [ "$BASE_BRANCH" = "(unknown)" ]; then
+            BASE_BRANCH="$(gh repo view "${STOCK_DB_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          fi
+
+          gh pr create \
+            --repo "${STOCK_DB_REPO}" \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "Update CN daily reference data" \
+            --body "Automated CN daily reference data update for ETF holdings, SZSE index constituents, and FTSE China A50 constituents."
