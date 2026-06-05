@@ -206,17 +206,42 @@ jobs:
           db = "databases/countries/CN/current.sqlite"
           con = sqlite3.connect(db)
           checks = {
-              "sse_stock_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SSE:%:stock'",
-              "szse_stock_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SZSE:%:stock'",
-              "sse_etf_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SSE:%:etf'",
-              "szse_etf_profiles": "select count(*) from instrument_profiles where instrument_id like 'CN:SZSE:%:etf'",
-              "etf_full_en": "select count(*) from instrument_profiles where instrument_id like 'CN:%:%:etf' and coalesce(full_name_en, '') <> ''",
+              "sse_stock_profiles": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.exchange_code='SSE' and i.instrument_type='stock'
+              """,
+              "szse_stock_profiles": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.exchange_code='SZSE' and i.instrument_type='stock'
+              """,
+              "sse_etf_profiles": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.exchange_code='SSE' and i.instrument_type='etf'
+              """,
+              "szse_etf_profiles": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.exchange_code='SZSE' and i.instrument_type='etf'
+              """,
+              "etf_full_en": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.instrument_type='etf' and coalesce(p.full_name_en, '') <> ''
+              """,
           }
           for name, sql in checks.items():
               value = con.execute(sql).fetchone()[0]
               print(f"[stock-db] verify {name}={value}")
           con.close()
           PY
+
+      - name: Check CN SQLite DB health
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        working-directory: stock-db
+        run: python3 tools/check_country_db.py databases/countries/CN/current.sqlite --warn-size-mb 80
 
       - name: Create Stock-DB low-frequency update PR
         if: steps.schedule_guard.outputs.should_run == 'true'

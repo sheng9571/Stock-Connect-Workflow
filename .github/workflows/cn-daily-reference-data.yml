@@ -108,6 +108,10 @@ jobs:
           con.close()
           PY
 
+      - name: Check CN SQLite DB health
+        working-directory: stock-db
+        run: python3 tools/check_country_db.py databases/countries/CN/current.sqlite --warn-size-mb 80
+
       - name: Create Stock-DB daily reference update PR
         working-directory: stock-db
         env:
