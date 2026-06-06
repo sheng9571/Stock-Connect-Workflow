@@ -118,6 +118,8 @@ jobs:
             --skip-sse-market-cap \
             --skip-szse-market-cap \
             --skip-etf-holdings \
+            --skip-sse-index \
+            --skip-sse-index-price \
             --skip-szse-index \
             --skip-szse-index-price \
             --skip-a50-index \

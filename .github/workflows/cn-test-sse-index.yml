@@ -1,17 +1,23 @@
-name: CN Daily Reference Data
+name: CN Test SSE Index
 
 on:
   workflow_dispatch:
-  schedule:
-    # 21:00 Asia/Taipei, Monday-Friday. Constituents/weights are often published later than quotes.
-    - cron: "0 13 * * 1-5"
+    inputs:
+      limit:
+        description: "SSE index rows to test"
+        required: false
+        default: "10"
+      codes:
+        description: "Optional comma-separated SSE index codes, e.g. 000010,000016"
+        required: false
+        default: ""
 
 permissions:
   contents: read
   packages: read
 
 concurrency:
-  group: stock-db-cn-daily-reference-data
+  group: stock-db-cn-test-sse-index
   cancel-in-progress: false
 
 env:
@@ -21,8 +27,8 @@ env:
   STOCK_DB_REPO: sheng9571/Stock-DB
 
 jobs:
-  cn-daily-reference-data:
-    name: Parse CN daily reference data
+  cn-test-sse-index:
+    name: Test SSE index parser
     runs-on: ubuntu-latest
 
     steps:
@@ -63,9 +69,15 @@ jobs:
             exit 1
           fi
 
-      - name: Parse daily reference data
+      - name: Test SSE index parser and DB write
         run: |
           mkdir -p cache site
+          LIMIT="${{ github.event.inputs.limit }}"
+          CODES="${{ github.event.inputs.codes }}"
+          CODE_ARGS=""
+          if [ -n "$CODES" ]; then
+            CODE_ARGS="--sse-index-codes $CODES"
+          fi
           docker run --rm \
             -e TZ=Asia/Taipei \
             -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
@@ -87,76 +99,51 @@ jobs:
                 --skip-sse-market-cap \
                 --skip-szse-market-cap \
                 --skip-etf-aum \
-                --skip-sse-index-price \
+                --skip-etf-holdings \
+                --skip-szse-index \
                 --skip-szse-index-price \
-                --stock-db-write-etf-holdings \
+                --skip-a50-index \
+                --sse-index-limit ${LIMIT} \
+                --sse-index-price-limit ${LIMIT} \
+                ${CODE_ARGS} \
                 --stock-db-write-sse-indexes \
-                --stock-db-write-szse-indexes \
-                --stock-db-write-a50-index \
+                --stock-db-write-sse-index-prices \
                 --skip-render
             "
 
-      - name: Verify CN SQLite DB daily reference data
+      - name: Verify SSE index test rows
         working-directory: stock-db
         run: |
           python3 - <<'PY'
           import sqlite3
           db = "databases/countries/CN/current.sqlite"
           con = sqlite3.connect(db)
-          indexes = con.execute("select count(*) from indexes").fetchone()[0]
-          index_constituents = con.execute("select count(*) from index_constituents_latest").fetchone()[0]
-          etf_holdings = con.execute("select count(*) from etf_holdings_latest").fetchone()[0]
-          sse_indexes = con.execute(
+          indexes = con.execute(
               "select count(*) from instruments where country_code='CN' and exchange_code='SSE' and instrument_type='index'"
           ).fetchone()[0]
-          szse_indexes = con.execute(
-              "select count(*) from instruments where country_code='CN' and exchange_code='SZSE' and instrument_type='index'"
+          constituents = con.execute(
+              """
+              select count(*)
+              from index_constituents_latest c
+              join instruments i on i.id = c.index_instrument_id
+              where i.country_code='CN'
+                and i.exchange_code='SSE'
+                and i.instrument_type='index'
+              """
           ).fetchone()[0]
-          print(f"[stock-db] verify indexes={indexes} sse_indexes={sse_indexes} szse_indexes={szse_indexes} index_constituents={index_constituents} etf_holdings={etf_holdings}")
+          prices = con.execute(
+              """
+              select count(*)
+              from instrument_metrics_latest m
+              join instruments i on i.id = m.instrument_id
+              where i.country_code='CN'
+                and i.exchange_code='SSE'
+                and i.instrument_type='index'
+                and m.quote_source='sse-yunhq-index-snap'
+              """
+          ).fetchone()[0]
+          print(f"[stock-db] verify sse_indexes={indexes} sse_index_constituents={constituents} sse_index_prices={prices}")
+          if indexes < 1:
+              raise SystemExit("Expected at least one SSE index row")
           con.close()
           PY
-
-      - name: Check CN SQLite DB health
-        working-directory: stock-db
-        run: python3 tools/check_country_db.py databases/countries/CN/current.sqlite --warn-size-mb 80
-
-      - name: Generate CN DB manifest and report
-        working-directory: stock-db
-        run: |
-          python3 tools/generate_db_manifest.py \
-            databases/countries/CN/current.sqlite \
-            --country CN \
-            --job cn-daily-reference-data \
-            --output-root . \
-            --warn-size-mb 80
-
-      - name: Create Stock-DB daily reference update PR
-        working-directory: stock-db
-        env:
-          GH_TOKEN: ${{ secrets.STOCK_DB_PAT }}
-        run: |
-          if git diff --quiet --exit-code; then
-            echo "[stock-db] no changes to commit"
-            exit 0
-          fi
-
-          git config user.name "stock-db-bot"
-          git config user.email "stock-db-bot@users.noreply.github.com"
-
-          BRANCH="bot/update-cn-daily-reference-$(date -u +'%Y%m%d-%H%M%S')"
-          git switch -c "$BRANCH"
-          git add databases/countries/CN/current.sqlite manifests/countries/CN/latest.json reports/countries/CN/latest.md
-          git commit -m "Update CN daily reference data"
-          git push origin "$BRANCH"
-
-          BASE_BRANCH="$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
-          if [ -z "$BASE_BRANCH" ] || [ "$BASE_BRANCH" = "(unknown)" ]; then
-            BASE_BRANCH="$(gh repo view "${STOCK_DB_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
-          fi
-
-          gh pr create \
-            --repo "${STOCK_DB_REPO}" \
-            --base "$BASE_BRANCH" \
-            --head "$BRANCH" \
-            --title "Update CN daily reference data" \
-            --body "Automated CN daily reference data update for ETF holdings, SSE/SZSE index constituents, and FTSE China A50 constituents."

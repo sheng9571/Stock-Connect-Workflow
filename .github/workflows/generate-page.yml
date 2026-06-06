@@ -63,6 +63,8 @@ jobs:
                 --szse-market-cap-limit 5 \
                 --etf-aum-limit 5 \
                 --etf-holdings-limit 5 \
+                --sse-index-limit 5 \
+                --skip-sse-index-price \
                 --szse-index-limit 5 \
                 --skip-szse-index-price
             "
