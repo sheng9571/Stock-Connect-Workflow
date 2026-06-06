@@ -243,6 +243,17 @@ jobs:
         working-directory: stock-db
         run: python3 tools/check_country_db.py databases/countries/CN/current.sqlite --warn-size-mb 80
 
+      - name: Generate CN DB manifest and report
+        if: steps.schedule_guard.outputs.should_run == 'true'
+        working-directory: stock-db
+        run: |
+          python3 tools/generate_db_manifest.py \
+            databases/countries/CN/current.sqlite \
+            --country CN \
+            --job "cn-low-frequency-profiles-${LOW_FREQUENCY_TARGET}-${LOW_FREQUENCY_MODE}" \
+            --output-root . \
+            --warn-size-mb 80
+
       - name: Create Stock-DB low-frequency update PR
         if: steps.schedule_guard.outputs.should_run == 'true'
         working-directory: stock-db
@@ -259,7 +270,7 @@ jobs:
 
           BRANCH="bot/update-cn-low-frequency-${LOW_FREQUENCY_TARGET}-$(date -u +'%Y%m%d-%H%M%S')"
           git switch -c "$BRANCH"
-          git add databases/countries/CN/current.sqlite
+          git add databases/countries/CN/current.sqlite manifests/countries/CN/latest.json reports/countries/CN/latest.md
           git commit -m "Update CN low-frequency profiles"
           git push origin "$BRANCH"
 

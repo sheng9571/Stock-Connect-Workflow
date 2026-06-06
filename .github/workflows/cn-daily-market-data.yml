@@ -125,6 +125,16 @@ jobs:
         working-directory: stock-db
         run: python3 tools/check_country_db.py databases/countries/CN/current.sqlite --warn-size-mb 80
 
+      - name: Generate CN DB manifest and report
+        working-directory: stock-db
+        run: |
+          python3 tools/generate_db_manifest.py \
+            databases/countries/CN/current.sqlite \
+            --country CN \
+            --job cn-daily-market-data \
+            --output-root . \
+            --warn-size-mb 80
+
       - name: Create Stock-DB daily market update PR
         working-directory: stock-db
         env:
@@ -140,7 +150,7 @@ jobs:
 
           BRANCH="bot/update-cn-daily-market-$(date -u +'%Y%m%d-%H%M%S')"
           git switch -c "$BRANCH"
-          git add databases/countries/CN/current.sqlite
+          git add databases/countries/CN/current.sqlite manifests/countries/CN/latest.json reports/countries/CN/latest.md
           git commit -m "Update CN daily market data"
           git push origin "$BRANCH"
 
