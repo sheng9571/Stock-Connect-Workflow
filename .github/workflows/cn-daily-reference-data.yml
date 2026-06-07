@@ -81,74 +81,67 @@ jobs:
         run: |
           mkdir -p cache site
           TARGET="${DAILY_REFERENCE_TARGET:-all}"
-          COMMON_ARGS="
-            --cache-dir /workspace/cache
-            --output /workspace/site/index.html
-            --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite
-            --stock-db-init-sql ${STOCK_DB_INIT_SQL}
-            --skip-sse-stock-profile
-            --skip-szse-stock-profile
-            --skip-szse-etf-profile
-            --skip-tradingview-etf-profile
-            --skip-sse-market-cap
-            --skip-szse-market-cap
-            --skip-etf-aum
-            --skip-sse-index-price
-            --skip-szse-index-price
-            --skip-render
-          "
+          COMMON_ARGS="\
+            --cache-dir /workspace/cache \
+            --output /workspace/site/index.html \
+            --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite \
+            --stock-db-init-sql ${STOCK_DB_INIT_SQL} \
+            --skip-sse-stock-profile \
+            --skip-szse-stock-profile \
+            --skip-szse-etf-profile \
+            --skip-tradingview-etf-profile \
+            --skip-sse-market-cap \
+            --skip-szse-market-cap \
+            --skip-etf-aum \
+            --skip-sse-index-price \
+            --skip-szse-index-price \
+            --skip-render"
           case "$TARGET" in
             all)
-              TARGET_ARGS="
-                --stock-db-write-etf-holdings
-                --stock-db-write-sse-indexes
-                --stock-db-write-szse-indexes
-                --stock-db-write-a50-index
-              "
+              TARGET_ARGS="\
+                --stock-db-write-etf-holdings \
+                --stock-db-write-sse-indexes \
+                --stock-db-write-szse-indexes \
+                --stock-db-write-a50-index"
               ;;
             sse-etf-ref)
-              TARGET_ARGS="
-                --etf-holdings-exchange SSE
-                --skip-sse-index
-                --skip-szse-index
-                --skip-a50-index
-                --stock-db-write-etf-holdings
-                --stock-db-write-exchange SSE
-              "
+              TARGET_ARGS="\
+                --etf-holdings-exchange SSE \
+                --skip-sse-index \
+                --skip-szse-index \
+                --skip-a50-index \
+                --stock-db-write-etf-holdings \
+                --stock-db-write-exchange SSE"
               ;;
             szse-etf-ref)
-              TARGET_ARGS="
-                --etf-holdings-exchange SZSE
-                --skip-sse-index
-                --skip-szse-index
-                --skip-a50-index
-                --stock-db-write-etf-holdings
-                --stock-db-write-exchange SZSE
-              "
+              TARGET_ARGS="\
+                --etf-holdings-exchange SZSE \
+                --skip-sse-index \
+                --skip-szse-index \
+                --skip-a50-index \
+                --stock-db-write-etf-holdings \
+                --stock-db-write-exchange SZSE"
               ;;
             sse-index-ref)
-              TARGET_ARGS="
-                --skip-etf-holdings
-                --skip-szse-index
-                --skip-a50-index
-                --stock-db-write-sse-indexes
-              "
+              TARGET_ARGS="\
+                --skip-etf-holdings \
+                --skip-szse-index \
+                --skip-a50-index \
+                --stock-db-write-sse-indexes"
               ;;
             szse-index-ref)
-              TARGET_ARGS="
-                --skip-etf-holdings
-                --skip-sse-index
-                --skip-a50-index
-                --stock-db-write-szse-indexes
-              "
+              TARGET_ARGS="\
+                --skip-etf-holdings \
+                --skip-sse-index \
+                --skip-a50-index \
+                --stock-db-write-szse-indexes"
               ;;
             a50-index-ref)
-              TARGET_ARGS="
-                --skip-etf-holdings
-                --skip-sse-index
-                --skip-szse-index
-                --stock-db-write-a50-index
-              "
+              TARGET_ARGS="\
+                --skip-etf-holdings \
+                --skip-sse-index \
+                --skip-szse-index \
+                --stock-db-write-a50-index"
               ;;
             *)
               echo "[config] unknown target=$TARGET"
