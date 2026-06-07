@@ -16,8 +16,8 @@ on:
           - szse-etf-market
           - index-prices
   schedule:
-    # 18:30 Asia/Taipei, Monday-Friday.
-    - cron: "30 10 * * 1-5"
+    # 15:30 Asia/Taipei, Monday-Friday.
+    - cron: "30 7 * * 1-5"
 
 permissions:
   contents: read
