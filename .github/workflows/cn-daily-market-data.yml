@@ -109,6 +109,7 @@ jobs:
                 --skip-szse-etf-profile \
                 --skip-tradingview-etf-profile \
                 --skip-szse-market-cap \
+                --skip-sse-etf-quote \
                 --skip-etf-aum \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
@@ -123,6 +124,7 @@ jobs:
                 --skip-szse-etf-profile \
                 --skip-tradingview-etf-profile \
                 --skip-sse-market-cap \
+                --skip-szse-etf-quote \
                 --skip-etf-aum \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
@@ -137,6 +139,7 @@ jobs:
                 --skip-szse-stock-profile \
                 --skip-szse-etf-profile \
                 --skip-szse-market-cap \
+                --skip-sse-stock-market-cap \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
                 --etf-aum-exchange SSE \
@@ -151,6 +154,7 @@ jobs:
                 --skip-sse-stock-profile \
                 --skip-szse-stock-profile \
                 --skip-sse-market-cap \
+                --skip-szse-stock-market-cap \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
                 --etf-aum-exchange SZSE \
