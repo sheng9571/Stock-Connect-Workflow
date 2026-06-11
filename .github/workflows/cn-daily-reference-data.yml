@@ -16,8 +16,8 @@ on:
           - szse-index-ref
           - a50-index-ref
   schedule:
-    # 19:00 Asia/Taipei, Monday-Friday. Constituents/weights are often published later than quotes.
-    - cron: "0 11 * * 1-5"
+    # 00:04 Asia/Taipei, Monday-Friday. Constituents/weights are often published later than quotes.
+    - cron: "4 16 * * 1-5"
 
 permissions:
   contents: read
