@@ -84,7 +84,7 @@ jobs:
         with:
           registry: ghcr.io
           username: sheng9571
-          password: ${{ secrets.STOCK_CN_GHCR_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Pull runtime image
         if: steps.schedule_guard.outputs.should_run == 'true'

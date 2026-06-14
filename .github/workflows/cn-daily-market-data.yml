@@ -59,7 +59,7 @@ jobs:
         with:
           registry: ghcr.io
           username: sheng9571
-          password: ${{ secrets.STOCK_CN_GHCR_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Pull runtime image
         run: docker pull "${IMAGE_NAME}"
