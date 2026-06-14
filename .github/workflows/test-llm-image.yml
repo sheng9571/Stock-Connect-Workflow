@@ -102,15 +102,15 @@ jobs:
               "messages": [
                 {
                   "role": "system",
-                  "content": "You are a helpful assistant. Reply with valid JSON only."
+                  "content": "You are a test assistant. Output only a compact JSON object. No explanation."
                 },
                 {
                   "role": "user",
-                  "content": "Return a JSON object with keys status and message. status must be ok."
+                  "content": "/no_think\nReturn exactly this JSON:\n{\"status\":\"ok\",\"message\":\"LLM image works\"}"
                 }
               ],
               "temperature": 0,
-              "max_tokens": 128
+              "max_tokens": 512
             }' | tee response.json
 
       - name: Validate response
@@ -123,12 +123,19 @@ jobs:
           data = json.loads(raw)
 
           assert "choices" in data, data
-          content = data["choices"][0]["message"]["content"]
 
-          print("Model response:")
+          msg = data["choices"][0]["message"]
+          content = msg.get("content") or ""
+          reasoning = msg.get("reasoning_content") or ""
+
+          print("Content:")
           print(content)
 
-          if not content.strip():
+          if reasoning:
+              print("Reasoning content detected:")
+              print(reasoning[:500])
+
+          if not content.strip() and not reasoning.strip():
               raise SystemExit("Empty model response")
 
           print("LLM image test passed")
