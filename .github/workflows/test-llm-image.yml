@@ -1,0 +1,146 @@
+name: Test Private LLM Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Choose LLM image to test"
+        required: true
+        type: choice
+        options:
+          - qwen35-4b
+          - qwen35-9b
+        default: qwen35-4b
+
+jobs:
+  test-llm-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      TAG: UD-Q4_K_XL
+      LLM_BASE_URL: http://localhost:8080/v1
+
+    steps:
+      - name: Resolve image
+        id: image
+        run: |
+          if [ "${{ inputs.model }}" = "qwen35-4b" ]; then
+            IMAGE="ghcr.io/sheng9571/llm-qwen35-4b:${TAG}"
+            MODEL_NAME="qwen35-4b"
+          elif [ "${{ inputs.model }}" = "qwen35-9b" ]; then
+            IMAGE="ghcr.io/sheng9571/llm-qwen35-9b:${TAG}"
+            MODEL_NAME="qwen35-9b"
+          else
+            echo "Unknown model: ${{ inputs.model }}"
+            exit 1
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "model_name=$MODEL_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "Selected image: $IMAGE"
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u sheng9571 --password-stdin
+
+      - name: Pull private LLM image
+        run: |
+          docker pull "${{ steps.image.outputs.image }}"
+
+      - name: Print image size
+        run: |
+          docker image ls "${{ steps.image.outputs.image }}"
+          docker image inspect "${{ steps.image.outputs.image }}" \
+            --format='Image size: {{.Size}} bytes'
+
+          python3 <<'PY'
+          import subprocess
+
+          image = "${{ steps.image.outputs.image }}"
+          size = subprocess.check_output([
+              "docker", "image", "inspect", image, "--format={{.Size}}"
+          ], text=True).strip()
+
+          size = int(size)
+          print(f"Image size: {size / 1024 / 1024 / 1024:.2f} GB")
+          PY
+
+      - name: Start LLM server
+        run: |
+          docker run -d \
+            --name test-llm \
+            -p 8080:8080 \
+            -e CTX_SIZE=8192 \
+            -e THREADS=4 \
+            "${{ steps.image.outputs.image }}"
+
+      - name: Wait for healthcheck
+        run: |
+          for i in {1..180}; do
+            if curl -fsS http://localhost:8080/health; then
+              echo "LLM server is healthy"
+              exit 0
+            fi
+
+            echo "Waiting for LLM server... attempt $i"
+            docker logs --tail 20 test-llm || true
+            sleep 5
+          done
+
+          echo "LLM server failed to become healthy"
+          docker logs test-llm || true
+          exit 1
+
+      - name: Test OpenAI-compatible chat completions
+        run: |
+          curl -fsS http://localhost:8080/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "${{ steps.image.outputs.model_name }}",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful assistant. Reply with valid JSON only."
+                },
+                {
+                  "role": "user",
+                  "content": "Return a JSON object with keys status and message. status must be ok."
+                }
+              ],
+              "temperature": 0,
+              "max_tokens": 128
+            }' | tee response.json
+
+      - name: Validate response
+        run: |
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          raw = Path("response.json").read_text(encoding="utf-8")
+          data = json.loads(raw)
+
+          assert "choices" in data, data
+          content = data["choices"][0]["message"]["content"]
+
+          print("Model response:")
+          print(content)
+
+          if not content.strip():
+              raise SystemExit("Empty model response")
+
+          print("LLM image test passed")
+          PY
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          docker logs test-llm || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f test-llm || true
+          docker logout ghcr.io || true
