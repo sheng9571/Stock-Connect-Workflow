@@ -64,7 +64,7 @@ jobs:
 
       - name: Checkout Stock-Connect repo
         if: steps.schedule_guard.outputs.should_run == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.PRIVATE_REPO }}
           token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
@@ -72,7 +72,7 @@ jobs:
 
       - name: Checkout Stock-DB repo
         if: steps.schedule_guard.outputs.should_run == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.STOCK_DB_REPO }}
           token: ${{ secrets.STOCK_DB_PAT }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: steps.schedule_guard.outputs.should_run == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: sheng9571
