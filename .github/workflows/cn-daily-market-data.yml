@@ -273,9 +273,14 @@ jobs:
             BASE_BRANCH="$(gh repo view "${STOCK_DB_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
           fi
 
-          gh pr create \
+          PR_URL="$(gh pr create \
             --repo "${STOCK_DB_REPO}" \
             --base "$BASE_BRANCH" \
             --head "$BRANCH" \
             --title "Update CN daily market data (${DAILY_MARKET_TARGET})" \
-            --body "Automated CN daily market data update. Target: ${DAILY_MARKET_TARGET}."
+            --body "Automated CN daily market data update. Target: ${DAILY_MARKET_TARGET}.")"
+          echo "[stock-db] created PR: ${PR_URL}"
+          gh pr merge "$PR_URL" \
+            --repo "${STOCK_DB_REPO}" \
+            --squash \
+            --delete-branch

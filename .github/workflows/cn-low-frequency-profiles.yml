@@ -286,9 +286,14 @@ jobs:
           fi
           echo "[stock-db] create PR base=${BASE_BRANCH} head=${BRANCH}"
 
-          gh pr create \
+          PR_URL="$(gh pr create \
             --repo "${STOCK_DB_REPO}" \
             --base "$BASE_BRANCH" \
             --head "$BRANCH" \
             --title "Update CN low-frequency profiles" \
-            --body "Automated CN low-frequency profile update. target=${LOW_FREQUENCY_TARGET}, mode=${LOW_FREQUENCY_MODE}."
+            --body "Automated CN low-frequency profile update. target=${LOW_FREQUENCY_TARGET}, mode=${LOW_FREQUENCY_MODE}.")"
+          echo "[stock-db] created PR: ${PR_URL}"
+          gh pr merge "$PR_URL" \
+            --repo "${STOCK_DB_REPO}" \
+            --squash \
+            --delete-branch
