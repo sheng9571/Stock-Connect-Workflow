@@ -79,9 +79,19 @@ jobs:
           fi
 
       - name: Parse daily reference data
+        env:
+          TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
+          TURSO_CSI_CACHE_AUTH_TOKEN: ${{ secrets.TURSO_CSI_CACHE_AUTH_TOKEN }}
         run: |
           mkdir -p cache site
           TARGET="${DAILY_REFERENCE_TARGET:-all}"
+          CSI_CACHE_ARGS=""
+          if [ -n "${TURSO_CSI_CACHE_DATABASE_URL:-}" ] && [ -n "${TURSO_CSI_CACHE_AUTH_TOKEN:-}" ]; then
+            CSI_CACHE_ARGS="--csi-index-use-file-cache"
+            echo "[config] CSI file cache enabled"
+          else
+            echo "[config] CSI file cache disabled: missing Turso secrets"
+          fi
           COMMON_ARGS="\
             --cache-dir /workspace/cache \
             --output /workspace/site/index.html \
@@ -105,7 +115,8 @@ jobs:
                 --stock-db-write-sse-indexes \
                 --stock-db-write-szse-indexes \
                 --stock-db-write-a50-index \
-                --stock-db-write-csi-indexes"
+                --stock-db-write-csi-indexes \
+                ${CSI_CACHE_ARGS}"
               ;;
             sse-etf-ref)
               TARGET_ARGS="\
@@ -157,7 +168,8 @@ jobs:
                 --skip-sse-index \
                 --skip-szse-index \
                 --skip-a50-index \
-                --stock-db-write-csi-indexes"
+                --stock-db-write-csi-indexes \
+                ${CSI_CACHE_ARGS}"
               ;;
             *)
               echo "[config] unknown target=$TARGET"
@@ -167,6 +179,8 @@ jobs:
           echo "[config] daily reference target=$TARGET"
           docker run --rm \
             -e TZ=Asia/Taipei \
+            -e TURSO_CSI_CACHE_DATABASE_URL="${TURSO_CSI_CACHE_DATABASE_URL}" \
+            -e TURSO_CSI_CACHE_AUTH_TOKEN="${TURSO_CSI_CACHE_AUTH_TOKEN}" \
             -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
             -v "${GITHUB_WORKSPACE}/stock-db:/workspace/stock-db" \
             -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \

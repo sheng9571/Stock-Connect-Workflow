@@ -1,0 +1,119 @@
+name: CN CSI File Cache Warmer
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_upload:
+        description: "Upload downloaded files to Litterbox and write Turso links"
+        required: true
+        type: boolean
+        default: false
+      limit:
+        description: "Limit CSI index codes for testing. Empty means no limit."
+        required: false
+        type: string
+        default: "100"
+      codes:
+        description: "Comma-separated CSI index codes. Empty means index-list order."
+        required: false
+        type: string
+        default: ""
+      download_delay_min:
+        description: "Minimum seconds to sleep after each CSI index"
+        required: true
+        type: string
+        default: "3"
+      download_delay_max:
+        description: "Maximum seconds to sleep after each CSI index"
+        required: true
+        type: string
+        default: "5"
+      components_for_non_stock:
+        description: "Also download closeweight files for non-stock CSI asset classes"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: stock-db-cn-csi-file-cache-warmer
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Taipei
+  IMAGE_NAME: ghcr.io/sheng9571/stock-cn:latest
+  PRIVATE_REPO: sheng9571/stock-connect
+
+jobs:
+  csi-file-cache-warmer:
+    name: Warm CSI file cache
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Stock-Connect repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.STOCK_CONNECT_REPO_TOKEN }}
+          path: stock-connect
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: sheng9571
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Pull runtime image
+        run: docker pull "${IMAGE_NAME}"
+
+      - name: Warm CSI file cache
+        env:
+          TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
+          TURSO_CSI_CACHE_AUTH_TOKEN: ${{ secrets.TURSO_CSI_CACHE_AUTH_TOKEN }}
+          ENABLE_UPLOAD: ${{ github.event.inputs.enable_upload }}
+          LIMIT: ${{ github.event.inputs.limit }}
+          CODES: ${{ github.event.inputs.codes }}
+          DOWNLOAD_DELAY_MIN: ${{ github.event.inputs.download_delay_min }}
+          DOWNLOAD_DELAY_MAX: ${{ github.event.inputs.download_delay_max }}
+          COMPONENTS_FOR_NON_STOCK: ${{ github.event.inputs.components_for_non_stock }}
+        run: |
+          mkdir -p cache
+          ARGS="\
+            --cache-dir /workspace/cache \
+            --download-delay-min ${DOWNLOAD_DELAY_MIN:-3} \
+            --download-delay-max ${DOWNLOAD_DELAY_MAX:-5}"
+          if [ -n "${LIMIT:-}" ]; then
+            ARGS="${ARGS} --limit ${LIMIT}"
+          fi
+          if [ -n "${CODES:-}" ]; then
+            ARGS="${ARGS} --codes ${CODES}"
+          fi
+          if [ "${COMPONENTS_FOR_NON_STOCK}" = "true" ]; then
+            ARGS="${ARGS} --components-for-non-stock"
+          fi
+          if [ "${ENABLE_UPLOAD}" = "true" ]; then
+            ARGS="${ARGS} --enable-upload"
+            if [ -z "${TURSO_CSI_CACHE_DATABASE_URL:-}" ] || [ -z "${TURSO_CSI_CACHE_AUTH_TOKEN:-}" ]; then
+              echo "[config] upload enabled but Turso secrets are missing"
+              exit 1
+            fi
+          else
+            echo "[config] upload disabled; this run only tests CSI download behavior"
+          fi
+
+          echo "[config] args=${ARGS}"
+          docker run --rm \
+            -e TZ=Asia/Taipei \
+            -e TURSO_CSI_CACHE_DATABASE_URL="${TURSO_CSI_CACHE_DATABASE_URL}" \
+            -e TURSO_CSI_CACHE_AUTH_TOKEN="${TURSO_CSI_CACHE_AUTH_TOKEN}" \
+            -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
+            -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \
+            "${IMAGE_NAME}" \
+            sh -c "
+              cd /workspace/stock-connect &&
+              python3 -m stock_connect_monitor.csi_file_cache_warmer ${ARGS}
+            "
