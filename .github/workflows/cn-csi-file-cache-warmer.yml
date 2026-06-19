@@ -7,12 +7,12 @@ on:
         description: "Upload downloaded files to Litterbox and write Turso links"
         required: true
         type: boolean
-        default: false
+        default: true
       limit:
         description: "Limit CSI index codes for testing. Empty means no limit."
         required: false
         type: string
-        default: "100"
+        default: ""
       codes:
         description: "Comma-separated CSI index codes. Empty means index-list order."
         required: false
@@ -33,6 +33,9 @@ on:
         required: true
         type: boolean
         default: false
+  schedule:
+    # 20:00 Asia/Taipei, Monday-Friday.
+    - cron: "0 12 * * 1-5"
 
 permissions:
   contents: read
@@ -74,12 +77,12 @@ jobs:
         env:
           TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
           TURSO_CSI_CACHE_AUTH_TOKEN: ${{ secrets.TURSO_CSI_CACHE_AUTH_TOKEN }}
-          ENABLE_UPLOAD: ${{ github.event.inputs.enable_upload }}
+          ENABLE_UPLOAD: ${{ github.event.inputs.enable_upload || 'true' }}
           LIMIT: ${{ github.event.inputs.limit }}
           CODES: ${{ github.event.inputs.codes }}
-          DOWNLOAD_DELAY_MIN: ${{ github.event.inputs.download_delay_min }}
-          DOWNLOAD_DELAY_MAX: ${{ github.event.inputs.download_delay_max }}
-          COMPONENTS_FOR_NON_STOCK: ${{ github.event.inputs.components_for_non_stock }}
+          DOWNLOAD_DELAY_MIN: ${{ github.event.inputs.download_delay_min || '3' }}
+          DOWNLOAD_DELAY_MAX: ${{ github.event.inputs.download_delay_max || '5' }}
+          COMPONENTS_FOR_NON_STOCK: ${{ github.event.inputs.components_for_non_stock || 'false' }}
         run: |
           mkdir -p cache
           ARGS="\
@@ -95,7 +98,7 @@ jobs:
           if [ "${COMPONENTS_FOR_NON_STOCK}" = "true" ]; then
             ARGS="${ARGS} --components-for-non-stock"
           fi
-          if [ "${ENABLE_UPLOAD}" = "true" ]; then
+          if [ "${ENABLE_UPLOAD:-true}" = "true" ]; then
             ARGS="${ARGS} --enable-upload"
             if [ -z "${TURSO_CSI_CACHE_DATABASE_URL:-}" ] || [ -z "${TURSO_CSI_CACHE_AUTH_TOKEN:-}" ]; then
               echo "[config] upload enabled but Turso secrets are missing"
