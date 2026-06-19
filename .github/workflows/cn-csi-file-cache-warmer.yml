@@ -38,6 +38,26 @@ on:
         required: true
         type: string
         default: "7200"
+      refresh_before_expiry_seconds:
+        description: "Start bucketed refresh when remaining TTL is at or below this value"
+        required: true
+        type: string
+        default: "172800"
+      refresh_bucket_count:
+        description: "Number of deterministic refresh buckets"
+        required: true
+        type: string
+        default: "2"
+      refresh_bucket:
+        description: "Optional bucket override. Empty uses the current UTC date."
+        required: false
+        type: string
+        default: ""
+      force_refresh:
+        description: "Ignore existing cache links and re-download selected symbols"
+        required: true
+        type: boolean
+        default: false
   schedule:
     # 20:00 Asia/Taipei, every day.
     - cron: "0 12 * * *"
@@ -89,18 +109,30 @@ jobs:
           DOWNLOAD_DELAY_MAX: ${{ github.event.inputs.download_delay_max || '5' }}
           COMPONENTS_FOR_NON_STOCK: ${{ github.event.inputs.components_for_non_stock || 'false' }}
           CACHE_MIN_TTL_SECONDS: ${{ github.event.inputs.cache_min_ttl_seconds || '7200' }}
+          REFRESH_BEFORE_EXPIRY_SECONDS: ${{ github.event.inputs.refresh_before_expiry_seconds || '172800' }}
+          REFRESH_BUCKET_COUNT: ${{ github.event.inputs.refresh_bucket_count || '2' }}
+          REFRESH_BUCKET: ${{ github.event.inputs.refresh_bucket }}
+          FORCE_REFRESH: ${{ github.event.inputs.force_refresh || 'false' }}
         run: |
           mkdir -p cache
           ARGS="\
             --cache-dir /workspace/cache \
             --download-delay-min ${DOWNLOAD_DELAY_MIN:-3} \
             --download-delay-max ${DOWNLOAD_DELAY_MAX:-5} \
-            --cache-min-ttl-seconds ${CACHE_MIN_TTL_SECONDS:-7200}"
+            --cache-min-ttl-seconds ${CACHE_MIN_TTL_SECONDS:-7200} \
+            --refresh-before-expiry-seconds ${REFRESH_BEFORE_EXPIRY_SECONDS:-172800} \
+            --refresh-bucket-count ${REFRESH_BUCKET_COUNT:-2}"
           if [ -n "${LIMIT:-}" ]; then
             ARGS="${ARGS} --limit ${LIMIT}"
           fi
           if [ -n "${CODES:-}" ]; then
             ARGS="${ARGS} --codes ${CODES}"
+          fi
+          if [ -n "${REFRESH_BUCKET:-}" ]; then
+            ARGS="${ARGS} --refresh-bucket ${REFRESH_BUCKET}"
+          fi
+          if [ "${FORCE_REFRESH:-false}" = "true" ]; then
+            ARGS="${ARGS} --disable-skip-existing-cache"
           fi
           if [ "${COMPONENTS_FOR_NON_STOCK}" = "true" ]; then
             ARGS="${ARGS} --components-for-non-stock"
