@@ -33,9 +33,14 @@ on:
         required: true
         type: boolean
         default: false
+      cache_min_ttl_seconds:
+        description: "Minimum remaining cache TTL required to skip an existing link"
+        required: true
+        type: string
+        default: "7200"
   schedule:
-    # 20:00 Asia/Taipei, Monday-Friday.
-    - cron: "0 12 * * 1-5"
+    # 20:00 Asia/Taipei, every day.
+    - cron: "0 12 * * *"
 
 permissions:
   contents: read
@@ -83,12 +88,14 @@ jobs:
           DOWNLOAD_DELAY_MIN: ${{ github.event.inputs.download_delay_min || '3' }}
           DOWNLOAD_DELAY_MAX: ${{ github.event.inputs.download_delay_max || '5' }}
           COMPONENTS_FOR_NON_STOCK: ${{ github.event.inputs.components_for_non_stock || 'false' }}
+          CACHE_MIN_TTL_SECONDS: ${{ github.event.inputs.cache_min_ttl_seconds || '7200' }}
         run: |
           mkdir -p cache
           ARGS="\
             --cache-dir /workspace/cache \
             --download-delay-min ${DOWNLOAD_DELAY_MIN:-3} \
-            --download-delay-max ${DOWNLOAD_DELAY_MAX:-5}"
+            --download-delay-max ${DOWNLOAD_DELAY_MAX:-5} \
+            --cache-min-ttl-seconds ${CACHE_MIN_TTL_SECONDS:-7200}"
           if [ -n "${LIMIT:-}" ]; then
             ARGS="${ARGS} --limit ${LIMIT}"
           fi
