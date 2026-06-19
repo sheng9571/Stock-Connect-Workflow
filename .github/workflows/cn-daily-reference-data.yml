@@ -15,6 +15,7 @@ on:
           - sse-index-ref
           - szse-index-ref
           - a50-index-ref
+          - csi-index-ref
   schedule:
     # 20:04 Asia/Taipei, Monday-Friday. Constituents/weights are often published later than quotes.
     - cron: "4 12 * * 1-5"
@@ -95,6 +96,7 @@ jobs:
             --skip-etf-aum \
             --skip-sse-index-price \
             --skip-szse-index-price \
+            --skip-csi-index-price \
             --skip-render"
           case "$TARGET" in
             all)
@@ -102,7 +104,8 @@ jobs:
                 --stock-db-write-etf-holdings \
                 --stock-db-write-sse-indexes \
                 --stock-db-write-szse-indexes \
-                --stock-db-write-a50-index"
+                --stock-db-write-a50-index \
+                --stock-db-write-csi-indexes"
               ;;
             sse-etf-ref)
               TARGET_ARGS="\
@@ -110,6 +113,7 @@ jobs:
                 --skip-sse-index \
                 --skip-szse-index \
                 --skip-a50-index \
+                --skip-csi-index \
                 --stock-db-write-etf-holdings \
                 --stock-db-write-exchange SSE"
               ;;
@@ -119,6 +123,7 @@ jobs:
                 --skip-sse-index \
                 --skip-szse-index \
                 --skip-a50-index \
+                --skip-csi-index \
                 --stock-db-write-etf-holdings \
                 --stock-db-write-exchange SZSE"
               ;;
@@ -127,6 +132,7 @@ jobs:
                 --skip-etf-holdings \
                 --skip-szse-index \
                 --skip-a50-index \
+                --skip-csi-index \
                 --stock-db-write-sse-indexes"
               ;;
             szse-index-ref)
@@ -134,6 +140,7 @@ jobs:
                 --skip-etf-holdings \
                 --skip-sse-index \
                 --skip-a50-index \
+                --skip-csi-index \
                 --stock-db-write-szse-indexes"
               ;;
             a50-index-ref)
@@ -141,7 +148,16 @@ jobs:
                 --skip-etf-holdings \
                 --skip-sse-index \
                 --skip-szse-index \
+                --skip-csi-index \
                 --stock-db-write-a50-index"
+              ;;
+            csi-index-ref)
+              TARGET_ARGS="\
+                --skip-etf-holdings \
+                --skip-sse-index \
+                --skip-szse-index \
+                --skip-a50-index \
+                --stock-db-write-csi-indexes"
               ;;
             *)
               echo "[config] unknown target=$TARGET"

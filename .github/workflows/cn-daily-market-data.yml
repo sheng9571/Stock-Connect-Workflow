@@ -92,6 +92,7 @@ jobs:
             --skip-sse-index \
             --skip-szse-index \
             --skip-a50-index \
+            --skip-csi-index \
             --skip-render"
           case "$TARGET" in
             all)
@@ -101,7 +102,8 @@ jobs:
                 --stock-db-write-etf-profiles \
                 --stock-db-write-etf-english-full-names \
                 --stock-db-write-sse-index-prices \
-                --stock-db-write-szse-index-prices"
+                --stock-db-write-szse-index-prices \
+                --stock-db-write-csi-index-prices"
               ;;
             sse-stock-market)
               TARGET_ARGS="\
@@ -113,6 +115,7 @@ jobs:
                 --skip-etf-aum \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
+                --skip-csi-index-price \
                 --stock-db-write-daily-market-data \
                 --stock-db-write-stock-profiles \
                 --stock-db-write-exchange SSE \
@@ -128,6 +131,7 @@ jobs:
                 --skip-etf-aum \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
+                --skip-csi-index-price \
                 --stock-db-write-daily-market-data \
                 --stock-db-write-stock-profiles \
                 --stock-db-write-exchange SZSE \
@@ -142,6 +146,7 @@ jobs:
                 --skip-sse-stock-market-cap \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
+                --skip-csi-index-price \
                 --etf-aum-exchange SSE \
                 --stock-db-write-daily-market-data \
                 --stock-db-write-etf-profiles \
@@ -157,6 +162,7 @@ jobs:
                 --skip-szse-stock-market-cap \
                 --skip-sse-index-price \
                 --skip-szse-index-price \
+                --skip-csi-index-price \
                 --etf-aum-exchange SZSE \
                 --stock-db-write-daily-market-data \
                 --stock-db-write-etf-profiles \
@@ -174,7 +180,8 @@ jobs:
                 --skip-szse-market-cap \
                 --skip-etf-aum \
                 --stock-db-write-sse-index-prices \
-                --stock-db-write-szse-index-prices"
+                --stock-db-write-szse-index-prices \
+                --stock-db-write-csi-index-prices"
               ;;
             *)
               echo "[config] unknown target=$TARGET"
