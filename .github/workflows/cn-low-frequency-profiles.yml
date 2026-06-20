@@ -16,6 +16,11 @@ on:
           - szse-etf-profiles
           - etf-english-full-names
           - csi-index-profiles
+      csi_index_profile_limit:
+        description: "Maximum missing CSI index profiles to process"
+        required: true
+        type: string
+        default: "500"
       mode:
         description: "Fetch mode"
         required: true
@@ -43,6 +48,7 @@ env:
   STOCK_DB_REPO: sheng9571/Stock-DB
   LOW_FREQUENCY_TARGET: ${{ github.event.inputs.target || 'all' }}
   LOW_FREQUENCY_MODE: ${{ github.event.inputs.mode || 'missing-only' }}
+  CSI_INDEX_PROFILE_LIMIT: ${{ github.event.inputs.csi_index_profile_limit || '500' }}
 
 jobs:
   cn-low-frequency-profiles:
@@ -140,6 +146,7 @@ jobs:
                 --csi-index-profile-delay-min 3 \
                 --csi-index-profile-delay-max 5 \
                 --csi-index-basic-info-use-file-cache \
+                --csi-index-profile-limit ${CSI_INDEX_PROFILE_LIMIT} \
                 --stock-db-write-csi-indexes"
               ;;
             sse-stock-profiles)
@@ -209,6 +216,7 @@ jobs:
                 --csi-index-profile-delay-min 6 \
                 --csi-index-profile-delay-max 10 \
                 --csi-index-basic-info-use-file-cache \
+                --csi-index-profile-limit ${CSI_INDEX_PROFILE_LIMIT} \
                 --stock-db-write-csi-indexes"
               ;;
             *)
@@ -217,7 +225,7 @@ jobs:
               ;;
           esac
 
-          echo "[stock-db] low-frequency target=${LOW_FREQUENCY_TARGET} mode=${LOW_FREQUENCY_MODE}"
+          echo "[stock-db] low-frequency target=${LOW_FREQUENCY_TARGET} mode=${LOW_FREQUENCY_MODE} csi_profile_limit=${CSI_INDEX_PROFILE_LIMIT}"
           docker run --rm \
             -e TZ=Asia/Taipei \
             -e TURSO_CSI_CACHE_DATABASE_URL="${TURSO_CSI_CACHE_DATABASE_URL}" \
