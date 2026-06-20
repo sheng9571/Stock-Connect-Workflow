@@ -19,12 +19,12 @@ on:
         type: string
         default: ""
       download_delay_min:
-        description: "Minimum seconds to sleep after each CSI index"
+        description: "Minimum seconds to sleep after each CSI file request"
         required: true
         type: string
         default: "3"
       download_delay_max:
-        description: "Maximum seconds to sleep after each CSI index"
+        description: "Maximum seconds to sleep after each CSI file request"
         required: true
         type: string
         default: "5"
@@ -77,7 +77,7 @@ env:
 
 jobs:
   csi-file-cache-warmer:
-    name: Warm CSI file cache
+    name: Warm CSI basic info and component caches
     runs-on: ubuntu-latest
 
     steps:
@@ -98,7 +98,7 @@ jobs:
       - name: Pull runtime image
         run: docker pull "${IMAGE_NAME}"
 
-      - name: Warm CSI file cache
+      - name: Warm CSI basic info and component caches
         env:
           TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
           TURSO_CSI_CACHE_AUTH_TOKEN: ${{ secrets.TURSO_CSI_CACHE_AUTH_TOKEN }}
