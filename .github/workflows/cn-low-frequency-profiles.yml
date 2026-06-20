@@ -134,8 +134,8 @@ jobs:
                 --stock-db-write-etf-profiles \
                 --stock-db-write-etf-english-full-names \
                 --skip-csi-index-components \
-                --csi-index-profile-delay-min 5 \
-                --csi-index-profile-delay-max 8 \
+                --csi-index-profile-delay-min 3 \
+                --csi-index-profile-delay-max 5 \
                 --stock-db-write-csi-indexes"
               ;;
             sse-stock-profiles)
@@ -202,8 +202,8 @@ jobs:
                 --skip-sse-index \
                 --skip-szse-index \
                 --skip-csi-index-components \
-                --csi-index-profile-delay-min 3 \
-                --csi-index-profile-delay-max 5 \
+                --csi-index-profile-delay-min 6 \
+                --csi-index-profile-delay-max 10 \
                 --stock-db-write-csi-indexes"
               ;;
             *)
