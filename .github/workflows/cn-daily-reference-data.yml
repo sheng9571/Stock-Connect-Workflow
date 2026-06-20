@@ -101,6 +101,8 @@ jobs:
             --csi-index-profile-delay-min 6 \
             --csi-index-profile-delay-max 10 \
             --csi-index-components-for-non-stock \
+            --csi-index-delay 0 \
+            --csi-index-timeout 300 \
             --skip-sse-stock-profile \
             --skip-szse-stock-profile \
             --skip-szse-etf-profile \

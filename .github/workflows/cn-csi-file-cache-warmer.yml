@@ -58,6 +58,21 @@ on:
         required: true
         type: boolean
         default: false
+      upload_timeout:
+        description: "Bundle upload timeout seconds"
+        required: true
+        type: string
+        default: "300"
+      bundle_size:
+        description: "Maximum component XLS files per ZIP bundle"
+        required: true
+        type: string
+        default: "500"
+      max_runtime_seconds:
+        description: "Soft download deadline before flushing pending bundles"
+        required: true
+        type: string
+        default: "18900"
   schedule:
     # 20:00 Asia/Taipei, every day.
     - cron: "0 12 * * *"
@@ -79,6 +94,7 @@ jobs:
   csi-file-cache-warmer:
     name: Warm CSI component cache
     runs-on: ubuntu-latest
+    timeout-minutes: 360
 
     steps:
       - name: Checkout Stock-Connect repo
@@ -113,6 +129,9 @@ jobs:
           REFRESH_BUCKET_COUNT: ${{ github.event.inputs.refresh_bucket_count || '2' }}
           REFRESH_BUCKET: ${{ github.event.inputs.refresh_bucket }}
           FORCE_REFRESH: ${{ github.event.inputs.force_refresh || 'false' }}
+          UPLOAD_TIMEOUT: ${{ github.event.inputs.upload_timeout || '300' }}
+          BUNDLE_SIZE: ${{ github.event.inputs.bundle_size || '500' }}
+          MAX_RUNTIME_SECONDS: ${{ github.event.inputs.max_runtime_seconds || '18900' }}
         run: |
           mkdir -p cache
           ARGS="\
@@ -121,7 +140,10 @@ jobs:
             --download-delay-max ${DOWNLOAD_DELAY_MAX:-5} \
             --cache-min-ttl-seconds ${CACHE_MIN_TTL_SECONDS:-7200} \
             --refresh-before-expiry-seconds ${REFRESH_BEFORE_EXPIRY_SECONDS:-172800} \
-            --refresh-bucket-count ${REFRESH_BUCKET_COUNT:-2}"
+            --refresh-bucket-count ${REFRESH_BUCKET_COUNT:-2} \
+            --upload-timeout ${UPLOAD_TIMEOUT:-300} \
+            --bundle-size ${BUNDLE_SIZE:-500} \
+            --max-runtime-seconds ${MAX_RUNTIME_SECONDS:-18900}"
           if [ -n "${LIMIT:-}" ]; then
             ARGS="${ARGS} --limit ${LIMIT}"
           fi
