@@ -15,6 +15,7 @@ on:
           - sse-etf-profiles
           - szse-etf-profiles
           - etf-english-full-names
+          - csi-index-profiles
       mode:
         description: "Fetch mode"
         required: true
@@ -122,6 +123,7 @@ jobs:
             --skip-sse-index-price \
             --skip-szse-index \
             --skip-szse-index-price \
+            --skip-csi-index-price \
             --skip-a50-index \
             --skip-render"
 
@@ -130,7 +132,11 @@ jobs:
               TARGET_ARGS="\
                 --stock-db-write-stock-profiles \
                 --stock-db-write-etf-profiles \
-                --stock-db-write-etf-english-full-names"
+                --stock-db-write-etf-english-full-names \
+                --skip-csi-index-components \
+                --csi-index-profile-delay-min 5 \
+                --csi-index-profile-delay-max 8 \
+                --stock-db-write-csi-indexes"
               ;;
             sse-stock-profiles)
               TARGET_ARGS="\
@@ -140,7 +146,8 @@ jobs:
                 --skip-etf-aum \
                 --stock-db-write-stock-profiles \
                 --stock-db-write-exchange SSE \
-                --stock-db-require-complete-stock-profiles"
+                --stock-db-require-complete-stock-profiles \
+                --skip-csi-index"
               ;;
             szse-stock-profiles)
               TARGET_ARGS="\
@@ -150,7 +157,8 @@ jobs:
                 --skip-etf-aum \
                 --stock-db-write-stock-profiles \
                 --stock-db-write-exchange SZSE \
-                --stock-db-require-complete-stock-profiles"
+                --stock-db-require-complete-stock-profiles \
+                --skip-csi-index"
               ;;
             sse-etf-profiles)
               TARGET_ARGS="\
@@ -160,7 +168,8 @@ jobs:
                 --skip-tradingview-etf-profile \
                 --etf-aum-exchange SSE \
                 --stock-db-write-etf-profiles \
-                --stock-db-write-exchange SSE"
+                --stock-db-write-exchange SSE \
+                --skip-csi-index"
               ;;
             szse-etf-profiles)
               TARGET_ARGS="\
@@ -170,7 +179,8 @@ jobs:
                 --etf-aum-exchange SZSE \
                 --stock-db-write-etf-profiles \
                 --stock-db-write-exchange SZSE \
-                --stock-db-require-complete-etf-profiles"
+                --stock-db-require-complete-etf-profiles \
+                --skip-csi-index"
               ;;
             etf-english-full-names)
               TARGET_ARGS="\
@@ -178,7 +188,23 @@ jobs:
                 --skip-szse-stock-profile \
                 --skip-szse-etf-profile \
                 --skip-etf-aum \
-                --stock-db-write-etf-english-full-names"
+                --stock-db-write-etf-english-full-names \
+                --skip-csi-index"
+              ;;
+            csi-index-profiles)
+              TARGET_ARGS="\
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --skip-etf-aum \
+                --skip-etf-holdings \
+                --skip-sse-index \
+                --skip-szse-index \
+                --skip-csi-index-components \
+                --csi-index-profile-delay-min 3 \
+                --csi-index-profile-delay-max 5 \
+                --stock-db-write-csi-indexes"
               ;;
             *)
               echo "[stock-db] unknown target: ${LOW_FREQUENCY_TARGET}"
@@ -227,6 +253,11 @@ jobs:
                   select count(*) from instrument_profiles p
                   join instruments i on i.id = p.instrument_id
                   where i.country_code='CN' and i.exchange_code='SZSE' and i.instrument_type='etf'
+              """,
+              "csi_index_profiles": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.exchange_code='CSI' and i.instrument_type='index'
               """,
               "etf_full_en": """
                   select count(*) from instrument_profiles p
