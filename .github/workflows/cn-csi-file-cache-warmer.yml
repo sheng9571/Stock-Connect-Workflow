@@ -92,9 +92,13 @@ env:
 
 jobs:
   csi-file-cache-warmer:
-    name: Warm CSI component cache
+    name: Warm CSI ${{ matrix.mode }} bundles
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [components, prices]
 
     steps:
       - name: Checkout Stock-Connect repo
@@ -114,8 +118,9 @@ jobs:
       - name: Pull runtime image
         run: docker pull "${IMAGE_NAME}"
 
-      - name: Warm CSI component cache
+      - name: Warm CSI ${{ matrix.mode }} bundles
         env:
+          CACHE_MODE: ${{ matrix.mode }}
           TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
           TURSO_CSI_CACHE_AUTH_TOKEN: ${{ secrets.TURSO_CSI_CACHE_AUTH_TOKEN }}
           ENABLE_UPLOAD: ${{ github.event.inputs.enable_upload || 'true' }}
@@ -133,8 +138,16 @@ jobs:
           BUNDLE_SIZE: ${{ github.event.inputs.bundle_size || '500' }}
           MAX_RUNTIME_SECONDS: ${{ github.event.inputs.max_runtime_seconds || '18900' }}
         run: |
+          if [ "${CACHE_MODE}" = "prices" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            DAY_OF_WEEK="$(TZ=Asia/Taipei date +%u)"
+            if [ "${DAY_OF_WEEK}" -gt 5 ]; then
+              echo "[config] skip weekend CSI price warmer"
+              exit 0
+            fi
+          fi
           mkdir -p cache
           ARGS="\
+            --mode ${CACHE_MODE} \
             --cache-dir /workspace/cache \
             --download-delay-min ${DOWNLOAD_DELAY_MIN:-3} \
             --download-delay-max ${DOWNLOAD_DELAY_MAX:-5} \

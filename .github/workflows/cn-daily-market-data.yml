@@ -78,6 +78,9 @@ jobs:
           fi
 
       - name: Parse daily market data
+        env:
+          TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
+          TURSO_CSI_CACHE_AUTH_TOKEN: ${{ secrets.TURSO_CSI_CACHE_AUTH_TOKEN }}
         run: |
           mkdir -p cache site
           TARGET="${DAILY_MARKET_TARGET:-all}"
@@ -93,6 +96,8 @@ jobs:
             --skip-szse-index \
             --skip-a50-index \
             --skip-csi-index \
+            --csi-index-price-use-bundle-cache \
+            --csi-index-price-timeout 300 \
             --skip-render"
           case "$TARGET" in
             all)
@@ -191,6 +196,8 @@ jobs:
           echo "[config] daily market target=$TARGET"
           docker run --rm \
             -e TZ=Asia/Taipei \
+            -e TURSO_CSI_CACHE_DATABASE_URL="${TURSO_CSI_CACHE_DATABASE_URL}" \
+            -e TURSO_CSI_CACHE_AUTH_TOKEN="${TURSO_CSI_CACHE_AUTH_TOKEN}" \
             -v "${GITHUB_WORKSPACE}/stock-connect:/workspace/stock-connect:ro" \
             -v "${GITHUB_WORKSPACE}/stock-db:/workspace/stock-db" \
             -v "${GITHUB_WORKSPACE}/cache:/workspace/cache" \
