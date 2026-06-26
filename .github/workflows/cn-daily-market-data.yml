@@ -241,9 +241,31 @@ jobs:
                 and m.quote_source='sse-yunhq-index-snap'
               """
           ).fetchone()[0]
+          sse_stock_prices = con.execute(
+              """
+              select count(*)
+              from instrument_metrics_latest m
+              join instruments i on i.id = m.instrument_id
+              where i.country_code='CN'
+                and i.exchange_code='SSE'
+                and i.instrument_type='stock'
+                and coalesce(m.close_price, '') <> ''
+              """
+          ).fetchone()[0]
+          szse_stock_prices = con.execute(
+              """
+              select count(*)
+              from instrument_metrics_latest m
+              join instruments i on i.id = m.instrument_id
+              where i.country_code='CN'
+                and i.exchange_code='SZSE'
+                and i.instrument_type='stock'
+                and coalesce(m.close_price, '') <> ''
+              """
+          ).fetchone()[0]
           instruments = con.execute("select count(*) from instruments where country_code='CN'").fetchone()[0]
           target = os.environ.get("DAILY_MARKET_TARGET", "all")
-          print(f"[stock-db] verify target={target} instruments={instruments} metric_rows={metrics} sse_index_prices={sse_index_prices} szse_index_prices={szse_index_prices}")
+          print(f"[stock-db] verify target={target} instruments={instruments} metric_rows={metrics} sse_stock_prices={sse_stock_prices} szse_stock_prices={szse_stock_prices} sse_index_prices={sse_index_prices} szse_index_prices={szse_index_prices}")
           if target == "all" and instruments < 1000:
               raise SystemExit("Expected at least 1000 CN instruments after daily market update")
           con.close()
