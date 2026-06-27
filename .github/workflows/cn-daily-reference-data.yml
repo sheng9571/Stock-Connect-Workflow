@@ -78,6 +78,16 @@ jobs:
             exit 1
           fi
 
+      - name: Snapshot CN SQLite DB before update
+        run: |
+          mkdir -p stock-db/tmp
+          if [ -f stock-db/databases/countries/CN/current.sqlite ]; then
+            cp stock-db/databases/countries/CN/current.sqlite stock-db/tmp/CN-before.sqlite
+            echo "[stock-db] before snapshot created"
+          else
+            python3 -c "import sqlite3; from pathlib import Path; path=Path('stock-db/tmp/CN-before.sqlite'); path.parent.mkdir(parents=True, exist_ok=True); sqlite3.connect(path).close(); print('[stock-db] empty before snapshot created')"
+          fi
+
       - name: Parse daily reference data
         env:
           TURSO_CSI_CACHE_DATABASE_URL: ${{ secrets.TURSO_CSI_CACHE_DATABASE_URL }}
@@ -221,6 +231,16 @@ jobs:
         working-directory: stock-db
         run: python3 tools/check_country_db.py databases/countries/CN/current.sqlite --warn-size-mb 80
 
+      - name: Generate CN DB compact change log
+        working-directory: stock-db
+        run: |
+          python3 tools/generate_country_db_change_log.py \
+            --before-db tmp/CN-before.sqlite \
+            --after-db databases/countries/CN/current.sqlite \
+            --country CN \
+            --job "cn-daily-reference-data:${DAILY_REFERENCE_TARGET}" \
+            --output-root .
+
       - name: Generate CN DB manifest and report
         working-directory: stock-db
         run: |
@@ -230,6 +250,52 @@ jobs:
             --job "cn-daily-reference-data:${DAILY_REFERENCE_TARGET}" \
             --output-root . \
             --warn-size-mb 80
+
+      - name: Free disk space for LLM image
+        run: |
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+          docker system df || true
+
+      - name: Pull LLM summary image
+        run: docker pull ghcr.io/sheng9571/llm-qwen35-4b:UD-Q4_K_XL
+
+      - name: Start LLM summary server
+        run: |
+          docker run -d \
+            --name stock-db-llm-summary \
+            -p 8080:8080 \
+            -e CTX_SIZE=8192 \
+            -e THREADS=4 \
+            ghcr.io/sheng9571/llm-qwen35-4b:UD-Q4_K_XL
+          for i in {1..180}; do
+            if curl -fsS http://localhost:8080/health; then
+              echo "[stock-db-llm] server healthy"
+              exit 0
+            fi
+            docker logs --tail 20 stock-db-llm-summary || true
+            sleep 5
+          done
+          docker logs stock-db-llm-summary || true
+          exit 1
+
+      - name: Add LLM summary to CN DB report
+        working-directory: stock-db
+        run: |
+          python3 tools/summarize_country_db_changes_with_llm.py \
+            --change-log reports/countries/CN/change-logs/latest.json \
+            --report reports/countries/CN/latest.md \
+            --base-url http://localhost:8080/v1 \
+            --model qwen35-4b
+
+      - name: Cleanup LLM summary server
+        if: always()
+        run: docker rm -f stock-db-llm-summary || true
 
       - name: Create Stock-DB daily reference update PR
         working-directory: stock-db
@@ -246,7 +312,7 @@ jobs:
 
           BRANCH="bot/update-cn-daily-reference-$(date -u +'%Y%m%d-%H%M%S')"
           git switch -c "$BRANCH"
-          git add databases/countries/CN/current.sqlite manifests/countries/CN/latest.json reports/countries/CN/latest.md
+          git add databases/countries/CN/current.sqlite manifests/countries/CN/latest.json reports/countries/CN/latest.md reports/countries/CN/change-logs/latest.json reports/countries/CN/change-logs/latest.sql
           git commit -m "Update CN daily reference data (${DAILY_REFERENCE_TARGET})"
           git push origin "$BRANCH"
 

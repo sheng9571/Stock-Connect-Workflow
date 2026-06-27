@@ -1,0 +1,134 @@
+name: Test Stock-DB LLM Summary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test-stock-db-llm-summary:
+    name: Test Stock-DB LLM summary (temporary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      STOCK_DB_REPO: sheng9571/Stock-DB
+      LLM_IMAGE: ghcr.io/sheng9571/llm-qwen35-4b:UD-Q4_K_XL
+
+    steps:
+      - name: Checkout Stock-DB repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.STOCK_DB_REPO }}
+          token: ${{ secrets.STOCK_DB_PAT }}
+          path: stock-db
+
+      - name: Free disk space for LLM image
+        run: |
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+          docker system df || true
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u sheng9571 --password-stdin
+
+      - name: Prepare sample change log
+        working-directory: stock-db
+        run: |
+          mkdir -p reports/countries/CN/change-logs reports/countries/CN
+          cat > reports/countries/CN/change-logs/latest.json <<'JSON'
+          {
+            "version": 1,
+            "country": "CN",
+            "job": "test-stock-db-llm-summary",
+            "generated_at_utc": "2026-06-27T00:00:00Z",
+            "table_counts": [
+              {"table": "instruments", "before": 7000, "after": 7002, "delta": 2},
+              {"table": "instrument_metrics_latest", "before": 5800, "after": 5900, "delta": 100}
+            ],
+            "instrument_changes": {
+              "inserted_count": 2,
+              "deleted_count": 0,
+              "status_changed_count": 1,
+              "inserted_sample": [
+                {"instrument_uid": "CN:SSE:603986:stock", "name": "GigaDevice Semiconductor Inc"}
+              ],
+              "deleted_sample": [],
+              "status_changed_sample": []
+            },
+            "metric_changes": {
+              "inserted_count": 5,
+              "price_date_changed_count": 95,
+              "close_price_changed_count": 95,
+              "inserted_sample": [],
+              "price_date_changed_sample": [
+                {"instrument": "CN:SSE:600000:stock", "before": "2026-06-26", "after": "2026-06-27"}
+              ]
+            },
+            "unresolved": {
+              "index_constituents_count": 1,
+              "index_constituents_sample": [
+                {
+                  "index_uid": "CN:FTSE:XIN9:index",
+                  "index_name": "FTSE China A50",
+                  "unresolved_name": "Gigadevice Semiconductor Beijing stock",
+                  "unresolved_exchange_code": "SSE",
+                  "rank": 23,
+                  "weight": 1.2
+                }
+              ],
+              "etf_holdings_count": 12
+            }
+          }
+          JSON
+          cat > reports/countries/CN/latest.md <<'MD'
+          # CN Stock-DB Report
+
+          - Status: `ok`
+          MD
+
+      - name: Pull LLM image
+        run: docker pull "${LLM_IMAGE}"
+
+      - name: Start LLM server
+        run: |
+          docker run -d \
+            --name stock-db-llm-summary-test \
+            -p 8080:8080 \
+            -e CTX_SIZE=8192 \
+            -e THREADS=4 \
+            "${LLM_IMAGE}"
+          for i in {1..180}; do
+            if curl -fsS http://localhost:8080/health; then
+              echo "LLM server is healthy"
+              exit 0
+            fi
+            docker logs --tail 20 stock-db-llm-summary-test || true
+            sleep 5
+          done
+          docker logs stock-db-llm-summary-test || true
+          exit 1
+
+      - name: Run LLM summary tool
+        working-directory: stock-db
+        run: |
+          python3 tools/summarize_country_db_changes_with_llm.py \
+            --change-log reports/countries/CN/change-logs/latest.json \
+            --report reports/countries/CN/latest.md \
+            --base-url http://localhost:8080/v1 \
+            --model qwen35-4b
+          cat reports/countries/CN/latest.md
+          grep -q "Daily Change Summary" reports/countries/CN/latest.md
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f stock-db-llm-summary-test || true
+          docker logout ghcr.io || true
