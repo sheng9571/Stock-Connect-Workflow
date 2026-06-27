@@ -16,9 +16,14 @@ on:
           - szse-index-ref
           - a50-index-ref
           - csi-index-ref
-  schedule:
-    # 20:04 Asia/Taipei, Monday-Friday. Constituents/weights are often published later than quotes.
-    - cron: "4 12 * * 1-5"
+      triggered_by:
+        description: "Optional upstream workflow name"
+        required: false
+        default: manual
+      source_workflow_run_id:
+        description: "Optional upstream workflow run id"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -298,6 +303,8 @@ jobs:
           python3 tools/summarize_country_db_changes_with_llm.py \
             --change-log reports/countries/CN/change-logs/latest.json \
             --report reports/countries/CN/latest.md \
+            --section-id cn-daily-reference-data \
+            --section-title "CN Daily Reference Data" \
             --base-url http://localhost:8080/v1 \
             --model qwen35-4b \
             --timeout 300 \
@@ -312,6 +319,8 @@ jobs:
           python3 tools/summarize_country_db_changes_with_llm.py \
             --change-log reports/countries/CN/change-logs/latest.json \
             --report reports/countries/CN/latest.md \
+            --section-id cn-daily-reference-data \
+            --section-title "CN Daily Reference Data" \
             --fallback-only
 
       - name: Cleanup LLM summary server

@@ -22,6 +22,7 @@ on:
 permissions:
   contents: read
   packages: read
+  actions: write
 
 concurrency:
   group: stock-db-cn-daily-market-data
@@ -352,6 +353,8 @@ jobs:
           python3 tools/summarize_country_db_changes_with_llm.py \
             --change-log reports/countries/CN/change-logs/latest.json \
             --report reports/countries/CN/latest.md \
+            --section-id cn-daily-market-data \
+            --section-title "CN Daily Market Data" \
             --base-url http://localhost:8080/v1 \
             --model qwen35-4b \
             --timeout 300 \
@@ -366,6 +369,8 @@ jobs:
           python3 tools/summarize_country_db_changes_with_llm.py \
             --change-log reports/countries/CN/change-logs/latest.json \
             --report reports/countries/CN/latest.md \
+            --section-id cn-daily-market-data \
+            --section-title "CN Daily Market Data" \
             --fallback-only
 
       - name: Cleanup LLM summary server
@@ -407,3 +412,20 @@ jobs:
             --repo "${STOCK_DB_REPO}" \
             --squash \
             --delete-branch
+
+      - name: Trigger CN daily reference data workflow
+        if: github.event_name == 'schedule' && env.DAILY_MARKET_TARGET == 'all'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REF_BRANCH="${GITHUB_REF_NAME}"
+          if [ -z "$REF_BRANCH" ]; then
+            REF_BRANCH="$(gh repo view "${GITHUB_REPOSITORY}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          fi
+          echo "[workflow] trigger cn-daily-reference-data.yml ref=${REF_BRANCH} target=all"
+          gh workflow run cn-daily-reference-data.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "$REF_BRANCH" \
+            -f target=all \
+            -f triggered_by=cn-daily-market-data \
+            -f source_workflow_run_id="${GITHUB_RUN_ID}"
