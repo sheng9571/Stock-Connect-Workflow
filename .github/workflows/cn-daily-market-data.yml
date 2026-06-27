@@ -317,9 +317,14 @@ jobs:
           docker system df || true
 
       - name: Pull LLM summary image
+        id: llm_pull
+        continue-on-error: true
         run: docker pull ghcr.io/sheng9571/llm-qwen35-4b:UD-Q4_K_XL
 
       - name: Start LLM summary server
+        id: llm_start
+        if: steps.llm_pull.outcome == 'success'
+        continue-on-error: true
         run: |
           docker run -d \
             --name stock-db-llm-summary \
@@ -339,6 +344,9 @@ jobs:
           exit 1
 
       - name: Add LLM summary to CN DB report
+        id: llm_summary
+        if: steps.llm_start.outcome == 'success'
+        continue-on-error: true
         working-directory: stock-db
         run: |
           python3 tools/summarize_country_db_changes_with_llm.py \
@@ -347,8 +355,18 @@ jobs:
             --base-url http://localhost:8080/v1 \
             --model qwen35-4b \
             --timeout 300 \
-            --max-tokens 400 \
-            --retries 2
+            --max-tokens 1200 \
+            --retries 2 \
+            --fallback-on-error
+
+      - name: Add deterministic summary fallback to CN DB report
+        if: steps.llm_start.outcome != 'success' || steps.llm_summary.outcome != 'success'
+        working-directory: stock-db
+        run: |
+          python3 tools/summarize_country_db_changes_with_llm.py \
+            --change-log reports/countries/CN/change-logs/latest.json \
+            --report reports/countries/CN/latest.md \
+            --fallback-only
 
       - name: Cleanup LLM summary server
         if: always()
