@@ -113,8 +113,8 @@ jobs:
             --stock-db-path /workspace/stock-db/databases/countries/CN/current.sqlite \
             --stock-db-init-sql ${STOCK_DB_INIT_SQL} \
             --low-frequency-mode missing-only \
-            --csi-index-profile-delay-min 6 \
-            --csi-index-profile-delay-max 10 \
+            --csi-index-profile-delay-min 3 \
+            --csi-index-profile-delay-max 5 \
             --csi-index-components-for-non-stock \
             --csi-index-delay 0 \
             --csi-index-timeout 300 \
