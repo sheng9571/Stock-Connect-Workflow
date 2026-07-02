@@ -15,6 +15,7 @@ on:
           - sse-etf-profiles
           - szse-etf-profiles
           - etf-english-full-names
+          - symbol-introductions
           - csi-index-profiles
 
       mode:
@@ -145,6 +146,8 @@ jobs:
                 --stock-db-write-stock-profiles \
                 --stock-db-write-etf-profiles \
                 --stock-db-write-etf-english-full-names \
+                --stock-db-write-symbol-introductions \
+                --cninfo-symbol-introduction-max-runtime-seconds 7200 \
                 --skip-csi-index-components \
                 --csi-index-profile-delay-min 3 \
                 --csi-index-profile-delay-max 5 \
@@ -202,6 +205,17 @@ jobs:
                 --skip-etf-aum \
                 --stock-db-write-etf-english-full-names \
                 --skip-csi-index"
+              ;;
+            symbol-introductions)
+              TARGET_ARGS="\
+                --skip-sse-stock-profile \
+                --skip-szse-stock-profile \
+                --skip-szse-etf-profile \
+                --skip-tradingview-etf-profile \
+                --skip-etf-aum \
+                --skip-csi-index \
+                --stock-db-write-symbol-introductions \
+                --cninfo-symbol-introduction-max-runtime-seconds 19800"
               ;;
             csi-index-profiles)
               TARGET_ARGS="\
@@ -275,6 +289,11 @@ jobs:
                   select count(*) from instrument_profiles p
                   join instruments i on i.id = p.instrument_id
                   where i.country_code='CN' and i.instrument_type='etf' and coalesce(p.full_name_en, '') <> ''
+              """,
+              "symbol_introductions": """
+                  select count(*) from instrument_profiles p
+                  join instruments i on i.id = p.instrument_id
+                  where i.country_code='CN' and i.instrument_type in ('stock', 'etf') and coalesce(p.introduction, '') <> ''
               """,
           }
           for name, sql in checks.items():
